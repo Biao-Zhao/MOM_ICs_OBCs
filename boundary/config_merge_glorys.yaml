@@ -1,0 +1,10 @@
+thetao_fn: /scratch/cimes/bz5265/MOM_ICs_OBCs/CMEMS/20240922/glo12_rg_6h-i_20240922-18h_3D-thetao_hcst.nc
+so_fn: /scratch/cimes/bz5265/MOM_ICs_OBCs/CMEMS/20240922/glo12_rg_6h-i_20240922-18h_3D-so_hcst.nc
+uovo_fn: /scratch/cimes/bz5265/MOM_ICs_OBCs/CMEMS/20240922/glo12_rg_6h-i_20240922-18h_3D-uovo_hcst.nc
+ssh_fn: /scratch/cimes/bz5265/MOM_ICs_OBCs/CMEMS/20240922/MOL_20240922.nc
+merged_fn: /scratch/cimes/bz5265/MOM_ICs_OBCs/scripts/temp/20240922/merged_20240922-18.nc
+ssh_time: 18
+min_lon: -105
+max_lon: -35
+min_lat: 10
+max_lat: 55

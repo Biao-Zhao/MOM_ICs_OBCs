@@ -1,0 +1,28 @@
+glorys_temperature: /scratch/cimes/bz5265/MOM_ICs_OBCs/CMEMS/20240920/glo12_rg_6h-i_20240920-00h_3D-thetao_hcst.nc
+glorys_salinity: /scratch/cimes/bz5265/MOM_ICs_OBCs/CMEMS/20240920/glo12_rg_6h-i_20240920-00h_3D-so_hcst.nc
+glorys_sea_surface_height: /scratch/cimes/bz5265/MOM_ICs_OBCs/CMEMS/20240920/MOL_20240920.nc
+glorys_zonal_velocity: /scratch/cimes/bz5265/MOM_ICs_OBCs/CMEMS/20240920/glo12_rg_6h-i_20240920-00h_3D-uovo_hcst.nc
+glorys_meridional_velocity: /scratch/cimes/bz5265/MOM_ICs_OBCs/CMEMS/20240920/glo12_rg_6h-i_20240920-00h_3D-uovo_hcst.nc
+ssh_time: 00
+# Paths to model grid files
+vgrid_file: /scratch/cimes/bz5265/MOM_ICs_OBCs/grid/C3200/vgrid_75_2m.nc
+grid_file: /scratch/cimes/bz5265/MOM_ICs_OBCs/grid/C3200/ocean_hgrid.nc
+# define the area to cut out
+min_lon: -105
+max_lon: -35
+min_lat: 10
+max_lat: 55
+
+# Output NetCDF file
+output_file: /scratch/cimes/bz5265/MOM_ICs_OBCs/ICs/C3200/MOM6_IC_2024092000_C3200.nc
+
+# Whether to reuse existing regridding weights (if applicable)
+reuse_weights: False
+
+# Variable names inside the NetCDF files
+variable_names:
+  temperature: thetao
+  salinity: so
+  sea_surface_height: sea_surface_height
+  zonal_velocity: uo
+  meridional_velocity: vo

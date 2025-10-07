@@ -1,0 +1,32 @@
+# author: 'Jing Chen'
+# description: 'Initial conditions for MOM6, generated from GLORYS PHY fields'
+# created: '2025-08-05'
+# Example YAML configuration file for multi-file GLORYS data
+
+# Paths to individual GLORYS files (one per variable)
+
+glorys_temperature: /scratch/cimes/bz5265/MOM_ICs_OBCs/CMEMS_data/20240922/glo12_rg_6h-i_20240922-00h_3D-thetao_hcst.nc
+glorys_salinity: /scratch/cimes/bz5265/MOM_ICs_OBCs/CMEMS_data/20240922/glo12_rg_6h-i_20240922-00h_3D-so_hcst.nc
+glorys_sea_surface_height: /scratch/cimes/bz5265/MOM_ICs_OBCs/CMEMS_data/20240922/MOL_20240922.nc
+glorys_zonal_velocity: /scratch/cimes/bz5265/MOM_ICs_OBCs/CMEMS_data/20240922/glo12_rg_6h-i_20240922-00h_3D-uovo_hcst.nc
+glorys_meridional_velocity: /scratch/cimes/bz5265/MOM_ICs_OBCs/CMEMS_data/20240922/glo12_rg_6h-i_20240922-00h_3D-uovo_hcst.nc
+
+# Paths to model grid files
+vgrid_file: ../../grid/C3200/vgrid_75_2m.nc
+grid_file: ../../grid/C3200/ocean_hgrid.nc
+
+# Output NetCDF file
+output_file: /scratch/cimes/bz5265/MOM_ICs_OBCs/ICs/C3200/glorys_ic_2024-09-22_3200_3km_fill_at_the_end.nc
+
+# Whether to reuse existing regridding weights (if applicable)
+reuse_weights: False
+
+# Variable names inside the NetCDF files
+variable_names:
+  temperature: thetao
+  salinity: so
+#  sea_surface_height: total_sea_level
+  sea_surface_height: sea_surface_height
+  zonal_velocity: uo
+  meridional_velocity: vo
+
