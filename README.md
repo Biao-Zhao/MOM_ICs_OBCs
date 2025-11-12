@@ -36,6 +36,7 @@ Set parameters (time range, region, resolution, etc.) in the user-defined sectio
 Below is the expected directory organization under `BASE_DIR`.  
 This structure ensures that downloaded data, grid files, and processing scripts are properly located.
 
+```
 BASE_DIR/
 ├── CMEMS/ → Downloaded GLORYS data
 │
@@ -49,7 +50,8 @@ BASE_DIR/
 ├── download/ → download_cmems_glorys.py
 ├── initial/ → write_MOM6_IC_<res>.py
 └── boundary/ → merge_glorys_<res>.py, write_MOM6_OBC_<res>.py
-    
+
+```   
 ---
 
 ## Workflow
