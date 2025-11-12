@@ -1,32 +1,29 @@
-<div align="center">
-
-# 🌊 **prepare_MOM6_inputs.sh**
+# prepare_MOM6_inputs.sh
 ### Automated CMEMS GLORYS Data Processing for MOM6
-**Author:** Dr. Biao Zhao · **Date:** 2025.10.04  
----
 
-</div>
-
-> ⚙️ *Automatically downloads and processes CMEMS GLORYS reanalysis data to generate initial and open boundary conditions for the MOM6 ocean model.*
+**Author:** Dr. Biao Zhao  
+**Date:** 2025-10-04  
 
 ---
 
-## 🧭 **Overview**
+## Overview
 
-`prepare_MOM6_inputs.sh` provides a **one-stop workflow** to prepare MOM6 input data:
+This script automates the preparation of **initial and open boundary conditions** for the MOM6 ocean model.  
+It downloads and processes **CMEMS GLORYS reanalysis data**, generating MOM6-ready NetCDF input files.
 
-1. ⬇️ Download CMEMS GLORYS data  
-2. 🧊 Generate MOM6 **Initial Conditions (IC)**  
-3. 🌐 Generate MOM6 **Open Boundary Conditions (OBC)**  
+Main functions:
+1. Download CMEMS GLORYS data  
+2. Create MOM6 Initial Condition (IC) files  
+3. Create MOM6 Open Boundary Condition (OBC) files  
 
-Each step can be run separately or all at once.
+Each step can be executed separately or together.
 
 ---
 
-## 🚀 **Quick Start**
+## Quick Start
 
 ```bash
-# Grant permission
+# Make the script executable
 chmod +x prepare_MOM6_inputs.sh
 
 # Run the script
