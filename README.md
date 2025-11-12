@@ -31,7 +31,8 @@ chmod +x prepare_MOM6_inputs.sh
 
 Set parameters (time range, region, resolution, etc.) in the user-defined section of the script before running.
 
----
+```
+
 ## Directory Structure
 
 Below is the expected directory organization under BASE_DIR.
