@@ -19,17 +19,7 @@ Main functions:
 Each step can be executed separately or together.
 
 ---
-## Directory Structure
-BASE_DIR/
-├── CMEMS/                  →  Downloaded GLORYS data
-├── ICs/<res>/              →  MOM6 initial condition outputs
-├── OBCs/<res>/             →  MOM6 boundary condition outputs
-├── grid/<res>/             →  MOM6 grid and vgrid files
-└── scripts/
-    ├── download/
-    ├── initial/
-    └── boundary/
----
+
 ## Quick Start
 
 ```bash
