@@ -57,15 +57,17 @@ BASE_DIR/
 ## Workflow
 
 The process consists of three main steps that can be executed separately or together.
-
+```
 Step 1 → Download GLORYS data
 Step 2 → Generate MOM6 initial condition
 Step 3 → Generate MOM6 open boundary condition
-
+```
 ---
 
 ## Example Outputs
+```
 ICs/C3200/MOM6_IC_2024092000_C3200.nc
 OBCs/C3200/20240920/thetao_001.nc
 OBCs/C3200/20240920/so_002.nc
 OBCs/C3200/20240920/uv_003.nc
+```
