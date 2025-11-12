@@ -1,8 +1,7 @@
 # prepare_MOM6_inputs.sh
 ### Automated CMEMS GLORYS Data Processing for MOM6
 
-**Author:** Dr. Biao Zhao  
-**Email:** bz5265@princeton.edu
+**Author:** Biao Zhao  
 **Date:** 2025-10-04  
 
 ---
@@ -24,7 +23,7 @@ Each step can be executed separately or together.
 ## Quick Start
 
 ```bash
-# Make the script executable
+**1. Make the script executable**
 chmod +x prepare_MOM6_inputs.sh
 
 # Run the script
