@@ -2,6 +2,7 @@
 ### Automated CMEMS GLORYS Data Processing for MOM6
 
 **Author:** Dr. Biao Zhao  
+**Email:** bz5265@princeton.edu
 **Date:** 2025-10-04  
 
 ---
@@ -31,6 +32,7 @@ chmod +x prepare_MOM6_inputs.sh
 
 Set parameters (time range, region, resolution, etc.) in the user-defined section of the script before running.
 
+---
 Directory Structure
 
 Below is the expected directory organization under BASE_DIR.
@@ -72,9 +74,3 @@ ICs/C3200/MOM6_IC_2024092000_C3200.nc
 OBCs/C3200/20240920/thetao_001.nc
 OBCs/C3200/20240920/so_002.nc
 OBCs/C3200/20240920/uv_003.nc
-
-Author
-
-Dr. Biao Zhao
-Ocean Modeling & Data Assimilation
-Email: bz5265@princeton.edu
