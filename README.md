@@ -8,8 +8,8 @@
 
 ## Overview
 
-This script automates the preparation of **initial and open boundary conditions** for the MOM6 ocean model.  
-It downloads and processes **CMEMS GLORYS reanalysis data**, generating MOM6-ready NetCDF input files.
+This script integrates the Python scripts developed by **Dr. Jing Chen** for processing MOM6 initial and boundary conditions.  
+It automates the downloading and processing of **CMEMS GLORYS reanalysis data**, generating MOM6-ready **initial** and **open boundary condition** files.
 
 Main functions:
 1. Download CMEMS GLORYS data  
