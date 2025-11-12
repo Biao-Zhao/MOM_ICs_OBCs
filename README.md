@@ -23,7 +23,7 @@ Each step can be executed separately or together.
 ## Quick Start
 
 ```bash
-**1. Make the script executable**
+# Make the script executable
 chmod +x prepare_MOM6_inputs.sh
 
 # Run the script
@@ -32,7 +32,7 @@ chmod +x prepare_MOM6_inputs.sh
 Set parameters (time range, region, resolution, etc.) in the user-defined section of the script before running.
 
 ---
-# Directory Structure
+## Directory Structure
 
 Below is the expected directory organization under BASE_DIR.
 This structure ensures that downloaded data, grid files, and processing scripts are properly located.
@@ -51,7 +51,7 @@ BASE_DIR/
     ├── initial/            →  write_MOM6_IC_<res>.py
     └── boundary/           →  merge_glorys_<res>.py, write_MOM6_OBC_<res>.py
 
-# Workflow
+## Workflow
 
 The process consists of three main steps that can be executed separately or together.
 
@@ -62,7 +62,7 @@ Step 3 → Generate MOM6 open boundary condition
 
 
 
-# Example Outputs
+## Example Outputs
 ICs/C3200/MOM6_IC_2024092000_C3200.nc
 OBCs/C3200/20240920/thetao_001.nc
 OBCs/C3200/20240920/so_002.nc
