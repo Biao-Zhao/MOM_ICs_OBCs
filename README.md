@@ -29,10 +29,8 @@ chmod +x prepare_MOM6_inputs.sh
 # Run the script
 ./prepare_MOM6_inputs.sh
 ```
-
+---
 Set parameters (time range, region, resolution, etc.) in the user-defined section of the script before running.
-
-
 
 ## Directory Structure
 
@@ -52,6 +50,8 @@ BASE_DIR/
     ├── download/           →  download_cmems_glorys.py
     ├── initial/            →  write_MOM6_IC_<res>.py
     └── boundary/           →  merge_glorys_<res>.py, write_MOM6_OBC_<res>.py
+    
+---
 
 ## Workflow
 
@@ -61,8 +61,7 @@ Step 1 → Download GLORYS data
 Step 2 → Generate MOM6 initial condition
 Step 3 → Generate MOM6 open boundary condition
 
-
-
+---
 
 ## Example Outputs
 ICs/C3200/MOM6_IC_2024092000_C3200.nc
