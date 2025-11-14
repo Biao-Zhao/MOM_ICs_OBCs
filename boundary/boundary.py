@@ -639,14 +639,13 @@ class Segment():
         ds_uv['z'] = np.arange(len(ds_uv['z']))
 
         ds_uv = self.expand_dims(ds_uv)
-
+ 
         # Check if 'lon' is not present, then add it
         if 'lon' not in ds_uv.variables:
-            ds_uv = ds_uv.update({'lon': ('locations', self.coords['lon'].values)})
-
+            ds_uv.update({'lon': ('locations', self.coords['lon'].values)})
         # Check if 'lat' is not present, then add it
         if 'lat' not in ds_uv.variables:
-            ds_uv = ds_uv.update({'lat': ('locations', self.coords['lat'].values)})
+            ds_uv.update({'lat': ('locations', self.coords['lat'].values)})
 
         ds_uv = self.rename_dims(ds_uv)
 
