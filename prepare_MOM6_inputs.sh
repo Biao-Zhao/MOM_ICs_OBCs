@@ -17,7 +17,8 @@
 # Note:                                                                                                #
 #   - If region bounds are not set, global data will be downloaded by default.                         #
 ########################################################################################################
-
+source $HOME/miniconda3/etc/profile.d/conda.sh
+conda activate regrid
 
 set -e
 
@@ -28,11 +29,14 @@ MODE="2"
 echo "[INFO] Running mode: $MODE"
 
 # Start and end date
-START_DATE="2024-09-20"
-END_DATE="2024-09-22"
+START_DATE="2024-07-01"
+END_DATE="2024-07-11"
 
-# use 6-hourly data in UTC, could be changed according needs, for example ("00" "06" "12" "18")
-TIME_SLOTS=("00")
+# Specify START_HOUR will only generate single initial condition, otherwise comment this line out
+START_HOUR="00"
+
+# use 6-hourly data in UTC, could be changed according needs, for example ("00" "06" "12" "18") or ("00" "01" "02" "03" "04" ........) 
+TIME_SLOTS=("00" "06" "12" "18")
 
 # Spefify which boundaries will be processed, for example ("south" "north" "east" "west") 
 SEGMENTS=("south" "north" "east")
@@ -41,16 +45,16 @@ SEGMENTS=("south" "north" "east")
 res="C3200"
 
 # Output directory for GLORYS and IC & OBC data
-BASE_DIR="/scratch/cimes/bz5265/MOM_ICs_OBCs"
+BASE_DIR="/ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs"
 GLORYS_DIR="${BASE_DIR}/CMEMS"
 IC_OUTPUT_DIR="${BASE_DIR}/ICs/${res}"
 OBC_OUTPUT_DIR="${BASE_DIR}/OBCs/${res}"
 
 # Paths of downloading, making initial $ open boundary condition scripts
 DOWNLOAD_SCRIPT="${BASE_DIR}/scripts/download/download_cmems_glorys.py"
-INITIAL_SCRIPT="${BASE_DIR}/scripts/initial/write_MOM6_IC_${res}.py"
-BOUNDARY_MERGE_SCRIPT="${BASE_DIR}/scripts/boundary/merge_glorys_${res}.py"
-BOUNDARY_MAKE_SCRIPT="${BASE_DIR}/scripts/boundary/write_MOM6_OBC_${res}.py"
+INITIAL_SCRIPT="${BASE_DIR}/scripts/initial/write_MOM6_IC.py"
+BOUNDARY_MERGE_SCRIPT="${BASE_DIR}/scripts/boundary/merge_glorys.py"
+BOUNDARY_MAKE_SCRIPT="${BASE_DIR}/scripts/boundary/write_MOM6_OBC.py"
 
 # vertical grid and horizontal superrid file of MOM6
 VGRID_FILE="${BASE_DIR}/grid/${res}/vgrid_75_2m.nc"
@@ -100,10 +104,18 @@ fi
 # ===================================== Step 2: Making initial condition  =================================
 if [[ "$MODE" == "2" || "$MODE" == "all" ]]; then
 
-echo "[INFO] Writing YAML configs for START_DATE (${START_DATE}) at hours: ${TIME_SLOTS[*]}"
+echo "[INFO] Writing YAML configs for START_DATE (${START_DATE})"
 DATE_COMPACT="${START_DATE//-/}"   # YYYYMMDD
 
-for HOUR in "${TIME_SLOTS[@]}"; do
+if [[ -n "$START_HOUR" ]]; then
+   echo "START_HOUR is set to ${START_HOUR}, only this hour will be processed."
+   HOURS_TO_RUN=("$START_HOUR")
+else
+   echo "Generating initial conditions for TIME_SLOTS: ${TIME_SLOTS[*]}"
+   HOURS_TO_RUN=("${TIME_SLOTS[@]}")
+fi
+
+for HOUR in "${HOURS_TO_RUN[@]}"; do
   # Paths for this hour (3D fields include the hour; SSH is daily file)
   THETAO_PATH="${GLORYS_DIR}/${DATE_COMPACT}/glo12_rg_6h-i_${DATE_COMPACT}-${HOUR}h_3D-thetao_hcst.nc"
   SO_PATH="${GLORYS_DIR}/${DATE_COMPACT}/glo12_rg_6h-i_${DATE_COMPACT}-${HOUR}h_3D-so_hcst.nc"
@@ -154,7 +166,7 @@ done
 echo "[INFO] Step 2 finished successfully."
 
 else
-  echo "[INFO] Skipping pahse 2 (Making initial condition)."
+  echo "[INFO] Skipping step 2 (Making initial condition)."
 fi
 
 
@@ -228,7 +240,6 @@ EOF
     i=$((i+1))
   done
 }> "${YAML_REGRID}"
-
   # 2. extract information at the boundaries specifieed in "config_regrid_glorys.yaml"
   ${EXE} ${BOUNDARY_MAKE_SCRIPT} --config ${YAML_REGRID} --year ${DATE_COMPACT:0:4} --month ${DATE_COMPACT:4:2} --day ${DATE_COMPACT:6:2} --hour ${HOUR}
 
@@ -256,7 +267,7 @@ done
     done
   done
 
-  rm -r ${BASE_DIR}/scripts/temp/ 
+  rm -r ${BASE_DIR}/scripts/temp/* 
 echo "[INFO] Step 3 finished successfully."
 
 fi
