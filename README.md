@@ -8,7 +8,7 @@
 
 ## Overview
 
-This script integrates the Python scripts developed by **Dr. Jing Chen** for processing MOM6 initial and boundary conditions. It automates the downloading and processing of **CMEMS GLORYS reanalysis data**, generating **initial** and **open boundary condition** files for regional MOM6.
+This script integrates the Python scripts developed by **Dr. Jing Chen** for processing MOM6 initial and boundary conditions. It automates the downloading and processing of **CMEMS GLORYS analysis data**, generating **initial** and **open boundary condition** files for regional MOM6.
 
 Main functions:
 1. Download CMEMS GLORYS data  
