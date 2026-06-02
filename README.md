@@ -28,6 +28,10 @@ chmod +x prepare_MOM6_inputs.sh
 # Run the script
 ./prepare_MOM6_inputs.sh
 ```
+#The script also supports optional arguments:
+./prepare_MOM6_inputs.sh START_DATE START_HOUR END_DATE MODE
+#For example:
+./prepare_MOM6_inputs.sh 2022-11-24 00 2022-12-03 1
 ---
 Set parameters (time range, region, resolution, etc.) in the user-defined section of the script before running.
 
