@@ -20,7 +20,6 @@ Each step can be executed separately or together.
 ---
 
 ## Quick Start
-## Quick Start
 
 Make the script executable:
 
