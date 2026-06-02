@@ -20,18 +20,53 @@ Each step can be executed separately or together.
 ---
 
 ## Quick Start
+## Quick Start
+
+Make the script executable:
 
 ```bash
-# Make the script executable
 chmod +x prepare_MOM6_inputs.sh
+```
 
-# Run the script
+Run the script with the default settings defined inside the file:
+
+```bash
 ./prepare_MOM6_inputs.sh
 ```
-#The script also supports optional arguments:
+
+The script also supports optional runtime arguments:
+
+```bash
 ./prepare_MOM6_inputs.sh START_DATE START_HOUR END_DATE MODE
-#For example:
+```
+
+For example:
+
+```bash
 ./prepare_MOM6_inputs.sh 2022-11-24 00 2022-12-03 1
+```
+
+This is equivalent to setting:
+
+```bash
+START_DATE="2022-11-24"
+START_HOUR="00"
+END_DATE="2022-12-03"
+MODE="1"
+```
+
+If an argument is not provided, the corresponding default value defined inside `prepare_MOM6_inputs.sh` will be used.
+
+---
+
+## Available Modes
+
+```bash
+MODE="1"    # download CMEMS GLORYS data only
+MODE="2"    # generate MOM6 initial condition only
+MODE="3"    # generate MOM6 open boundary conditions only
+MODE="all"  # run all steps
+```
 ---
 Set parameters (time range, region, resolution, etc.) in the user-defined section of the script before running.
 
