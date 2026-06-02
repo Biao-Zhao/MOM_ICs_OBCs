@@ -1,5 +1,4 @@
 #!/bin/bash
-#
 ########################################################################################################
 # prepare_MOM6_inputs.sh, written by Dr Biao Zhao                                                      #
 #                                  --------- 2025.10.04 -------                                        #
@@ -25,12 +24,12 @@ set -e
 # ======== User defined parameters ========
 
 # set 1: Perform download GLORYS data process. set 2: only make initial condition. set 3: only make bounday conditions.  set "all": run all steps
-MODE="2"
+MODE="1"
 echo "[INFO] Running mode: $MODE"
 
 # Start and end date
-START_DATE="2024-07-01"
-END_DATE="2024-07-11"
+START_DATE="2022-11-24"
+END_DATE="2022-12-03"
 
 # Specify START_HOUR will only generate single initial condition, otherwise comment this line out
 START_HOUR="00"
@@ -44,11 +43,14 @@ SEGMENTS=("south" "north" "east")
 #grid cases
 res="C3200"
 
+#vertical levels
+NK="85"
+
 # Output directory for GLORYS and IC & OBC data
 BASE_DIR="/ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs"
 GLORYS_DIR="${BASE_DIR}/CMEMS"
-IC_OUTPUT_DIR="${BASE_DIR}/ICs/${res}"
-OBC_OUTPUT_DIR="${BASE_DIR}/OBCs/${res}"
+IC_OUTPUT_DIR="${BASE_DIR}/ICs/${res}/NK${NK}"
+OBC_OUTPUT_DIR="${BASE_DIR}/OBCs/${res}/NK${NK}"
 
 # Paths of downloading, making initial $ open boundary condition scripts
 DOWNLOAD_SCRIPT="${BASE_DIR}/scripts/download/download_cmems_glorys.py"
@@ -57,7 +59,7 @@ BOUNDARY_MERGE_SCRIPT="${BASE_DIR}/scripts/boundary/merge_glorys.py"
 BOUNDARY_MAKE_SCRIPT="${BASE_DIR}/scripts/boundary/write_MOM6_OBC.py"
 
 # vertical grid and horizontal superrid file of MOM6
-VGRID_FILE="${BASE_DIR}/grid/${res}/vgrid_75_2m.nc"
+VGRID_FILE="${BASE_DIR}/grid/${res}/vgrid_${NK}.nc"
 HGRID_FILE="${BASE_DIR}/grid/${res}/ocean_hgrid.nc"
 
 # Optional region boundaries (comment out if you want global data)
@@ -68,6 +70,26 @@ MAX_LAT=55
 
 # use python3, can be changed according the local enviroment 
 EXE="python3"
+
+if [ -n "$1" ]; then
+    START_DATE="$1"
+    echo "START_DATE = ${START_DATE}"
+fi
+
+if [ -n "$2" ]; then
+    START_HOUR="$2"
+    echo "START_HOUR = ${START_HOUR}"
+fi
+
+if [ -n "$3" ]; then
+    END_DATE="$3"
+    echo "END_DATE   = ${END_DATE}"
+fi
+
+if [ -n "$4" ]; then
+    MODE="$4"
+    echo "MODE   = ${MODE}"
+fi
 
 
 # ===================================== Step 1: download glorys data  =================================
@@ -249,7 +271,7 @@ EOF
 done
 
   # 3. Merging booundary data
-  mkdir -p ${OBC_OUTPUT_DIR}/${START_DATE:0:4}${START_DATE:5:2}${START_DATE:8:2} 
+  mkdir -p ${OBC_OUTPUT_DIR}/${START_DATE:0:4}${START_DATE:5:2}${START_DATE:8:2}${START_HOUR} 
   VARS=(thetao so zos uv)
   for var in "${VARS[@]}"; do
     for seg in "${SEGS[@]}"; do
@@ -260,7 +282,7 @@ done
         echo "[ERROR] Expected pattern: ${var}_${segnum}_YYYYMMDD-HH.nc"
         exit 1
       fi
-      out="${OBC_OUTPUT_DIR}/${START_DATE:0:4}${START_DATE:5:2}${START_DATE:8:2}/${var}_${segnum}.nc"
+      out="${OBC_OUTPUT_DIR}/${START_DATE:0:4}${START_DATE:5:2}${START_DATE:8:2}${START_HOUR}/${var}_${segnum}.nc"
       printf '    %s\n' "${files[@]}"
       echo "[INFO] ncrcat ${#files[@]} files → ${out}"
       ncrcat "${files[@]}" "${out}"
