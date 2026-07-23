@@ -1,4 +1,4 @@
-glorys_dir: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/scripts/temp/20221201
+glorys_dir: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/scripts/temp/20221130
 output_dir: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/scripts/temp/
 hgrid: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/grid/C3200/ocean_hgrid.nc 
 ncrcat_years: true  # Set to false if you want to skip ncrcat_years

@@ -28,8 +28,8 @@ MODE="1"
 echo "[INFO] Running mode: $MODE"
 
 # Start and end date
-START_DATE="2022-11-24"
-END_DATE="2022-12-03"
+START_DATE="2022-12-03"
+END_DATE="2022-12-04"
 
 # Specify START_HOUR will only generate single initial condition, otherwise comment this line out
 START_HOUR="00"

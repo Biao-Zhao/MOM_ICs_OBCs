@@ -2,6 +2,8 @@
 module load matlab/R2024a
 
 set basedir = "/gpfs/f6/bil-coastal-gfdl/scratch/Biao.Zhao/MOM_ICs_OBCs"
+set rundir = "/ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/scripts"
+
 #model resolution
 set res = 3200
 set NK  = 85
@@ -44,7 +46,7 @@ foreach mon ($months)
       if (! -f $ICS ) then
          set mode = 2
          echo "Generating Initial Conditions: $mode" 
-        ./prepare_MOM6_inputs.sh ${CDATE_FMT} ${hh} ${EDATE_FMT} ${mode} >>& stdout/making_ICS_OBCs_${CDATE}.log 
+      #${rundir}/prepare_MOM6_inputs.sh ${CDATE_FMT} ${hh} ${EDATE_FMT} ${mode} >>& stdout/making_ICS_OBCs_${CDATE}.log 
       else
          echo " ICS already exists: $ICS, please double-check"
       endif
@@ -52,7 +54,7 @@ foreach mon ($months)
       if (! -d $OBCS) then
          set mode = 3
          echo "Generating Boundary Conditions: $mode"
-         ./prepare_MOM6_inputs.sh ${CDATE_FMT} ${hh} ${EDATE_FMT} ${mode} >>& stdout/making_ICS_OBCs_${CDATE}.log
+      #${rundir}/prepare_MOM6_inputs.sh ${CDATE_FMT} ${hh} ${EDATE_FMT} ${mode} >>& stdout/making_ICS_OBCs_${CDATE}.log
       else
          echo " OBCS already exists: $OBCS, please double-check"
       endif
@@ -60,7 +62,7 @@ foreach mon ($months)
       if ( $recontr ) then
         set ICS_GEO  = ${basedir}/ICs/C${res}/NK${NK}/MOM6_IC_${CDATE}${hh}_C${res}_geocurrents.nc
         echo "Reconstruct geostrophic currents"
-        matlab -nodisplay -nosplash -r "ICS='$ICS'; ICS_GEO='$ICS_GEO'; run('${basedir}/geostrophic_adj/reconstruction_current.m'); exit"  >>& stdout/making_ICS_OBCs_${CDATE}.log
+        matlab -nodisplay -nosplash -r "ICS='$ICS'; ICS_GEO='$ICS_GEO'; run('${rundir}/geostrophic_adj/reconstruction_current.m'); exit"  >>& stdout/making_ICS_OBCs_${CDATE}.log
       endif 
 
     end   # hh
