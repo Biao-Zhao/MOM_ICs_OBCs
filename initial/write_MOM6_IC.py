@@ -2,7 +2,7 @@
 """
 script for preparing model IC (ssh,T,S,u,v) from Glorys data
 How to use
-./write_glorys_IC_C3200.py --config_file glorys_IC_C3200.yaml
+python write_MOM6_IC.py --config_file glorys_IC_C3200.yaml
 """
 
 # author: 'Jing Chen'
@@ -116,18 +116,12 @@ def write_initial(config):
        .rename({"longitude": "lon", "latitude": "lat"})  # only rename coords
     )
 
-
-
-
-
-
-
-
     ds_sal = (
         xarray.open_dataset(sal_file)[sal_var]
         .sel(longitude=slice(lon_min, lon_max), latitude=slice(lat_min, lat_max))  # Subset region
 #        .isel(latitude=slice(None, None, 6), longitude=slice(None, None, 12))  # Downsample
         .rename({"longitude": "lon", "latitude": "lat"})
+        .assign_coords(lat=ds_temp.lat, lon=ds_temp.lon)
     )
 
     ds_ssh = (
@@ -138,6 +132,7 @@ def write_initial(config):
         .isel(depth=0, drop=True)
 #        .sel(depth=0, method="nearest", drop=True)  # Select the surface layer and drop depth dimension
         .rename({"longitude": "lon", "latitude": "lat"})
+        .assign_coords(lat=ds_temp.lat, lon=ds_temp.lon)
     )
 
 #    print("NaN count in region of interest:", ds_ssh.isnull().sum().values)
@@ -151,6 +146,7 @@ def write_initial(config):
         .sel(longitude=slice(lon_min, lon_max), latitude=slice(lat_min, lat_max))  # Subset region
 #        .isel(latitude=slice(None, None, 6), longitude=slice(None, None, 12))  # Downsample
         .rename({"longitude": "lon", "latitude": "lat"})
+        .assign_coords(lat=ds_temp.lat, lon=ds_temp.lon)
     )
 
     ds_v = (
@@ -158,6 +154,7 @@ def write_initial(config):
         .sel(longitude=slice(lon_min, lon_max), latitude=slice(lat_min, lat_max))  # Subset region
 #        .isel(latitude=slice(None, None, 6), longitude=slice(None, None, 12))  # Downsample
         .rename({"longitude": "lon", "latitude": "lat"})
+        .assign_coords(lat=ds_temp.lat, lon=ds_temp.lon)
     )
 
 
@@ -174,10 +171,11 @@ def write_initial(config):
     # 5) Merge into a single dataset
     glorys = xarray.merge([ds_temp, ds_sal, ds_ssh, ds_u, ds_v])
     print("Before Subsample", glorys.dims)
+    
 
     # 6) Subsample: take every other point in x and y
-    glorys = glorys.isel(lon=slice(0, None, 2), lat=slice(0, None, 2))
-    print("After Subsample", glorys.dims)
+   # glorys = glorys.isel(lon=slice(0, None, 2), lat=slice(0, None, 2))
+   # print("After Subsample", glorys.dims)
 
     # Round time down to midnight
     glorys['time'] = (('time', ), ds_temp['time'].dt.floor('1d').data)
@@ -187,8 +185,8 @@ def write_initial(config):
     # Depths below bottom of GLORYS are filled by extrapolating the deepest available value.
 #    revert = glorys.interp(depth=ztarget, kwargs={'fill_value': 'extrapolate'}).ffill('zl', limit=None)
     #Interpolates only within the valid range;Leaves anything outside (e.g., deeper than GLORYS) as NaN;
-    revert = glorys.interp(depth=ztarget) 
-    
+    #revert = glorys.interp(depth=ztarget) 
+    revert = glorys.interp(depth=ztarget).bfill('zl') 
     # Flood temperature and salinity over land. 
     flooded = xarray.merge((
         flood.flood_kara(revert[v], zdim='zl') for v in [temp_var, sal_var, u_var, v_var]
@@ -256,7 +254,6 @@ def write_initial(config):
     target_max_lon = target_grid['x'].max().item()
     print("Max longitude in ocean_hgrid.nc (target_max_lon):", target_max_lon)
 
-    glorys['lon'] = xarray.where(glorys['lon'] > target_max_lon, glorys['lon'] - 360, glorys['lon'])
 
     
     target_t = (
@@ -276,12 +273,9 @@ def write_initial(config):
     print("glorys", glorys)
     print("target_uv", target_uv)
 
-
-
-    regrid_kws = dict(method='nearest_s2d', reuse_weights=reuse_weights, periodic=False)
-
+    
+    regrid_kws = dict(method='bilinear', reuse_weights=reuse_weights, periodic=False)
     print("t")
-
 
     glorys_to_t = xesmf.Regridder(glorys, target_t, filename='regrid_glorys_tracers.nc', **regrid_kws)
     print("uv:")

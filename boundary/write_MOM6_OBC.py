@@ -67,6 +67,7 @@ def write_day(date, glorys_dir, segments, variables, output_prefix):
     # Capture time attributes and encoding
     time_attrs = glorys['time'].attrs if 'time' in glorys.coords else None
     time_encoding = glorys['time'].encoding if 'time' in glorys.coords else None
+   
 
     for segment in segments:
         for variable in variables:
