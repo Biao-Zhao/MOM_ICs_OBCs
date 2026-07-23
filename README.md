@@ -85,8 +85,8 @@ BASE_DIR/
 │
 └── scripts/
 ├── download/ → download_cmems_glorys.py
-├── initial/ → write_MOM6_IC_<res>.py
-└── boundary/ → merge_glorys_<res>.py, write_MOM6_OBC_<res>.py
+├── initial/ → write_MOM6_IC.py
+└── boundary/ → merge_glorys.py, write_MOM6_OBC.py
 
 ```   
 ---
