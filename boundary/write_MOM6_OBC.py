@@ -155,9 +155,14 @@ def process_single_day(config, year, month, day, hour):
     variables = config['variables']
 
     hgrid = xarray.open_dataset(config['hgrid'])
+    regrid_dir = config.get('regrid_dir', config['output_dir'])
+    resolution = str(config['resolution'])
+
+    os.makedirs(regrid_dir, exist_ok=True)
     segments = [
-        Segment(seg_config['id'], seg_config['border'], hgrid, output_dir=config['output_dir'])
-        for seg_config in config['segments']
+        Segment(seg_config['id'], seg_config['border'], hgrid, output_dir=config['output_dir'],
+        regrid_dir=regrid_dir, resolution=resolution,)
+       for seg_config in config['segments']
     ]
 
     write_day(specific_date, glorys_dir, segments, variables, output_prefix)

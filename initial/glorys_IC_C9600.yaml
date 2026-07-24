@@ -3,10 +3,11 @@ glorys_salinity: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/CMEMS/20221128/glo
 glorys_sea_surface_height: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/CMEMS/20221128/MOL_20221128.nc
 glorys_zonal_velocity: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/CMEMS/20221128/glo12_rg_6h-i_20221128-12h_3D-uovo_hcst.nc
 glorys_meridional_velocity: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/CMEMS/20221128/glo12_rg_6h-i_20221128-12h_3D-uovo_hcst.nc
+resolution: C9600
 ssh_time: 12
 # Paths to model grid files
-vgrid_file: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/grid/C3200/vgrid_85.nc
-grid_file: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/grid/C3200/ocean_hgrid.nc
+vgrid_file: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/grid/C9600/vgrid_85.nc
+grid_file: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/grid/C9600/ocean_hgrid.nc
 # define the area to cut out
 min_lon: -105
 max_lon: -35
@@ -14,10 +15,11 @@ min_lat: 10
 max_lat: 55
 
 # Output NetCDF file
-output_file: ./MOM6_IC_2022112812_C3200.nc
+output_file: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/ICs/C9600/NK85/MOM6_IC_2022112812_C9600.nc
 
 # Whether to reuse existing regridding weights (if applicable)
-reuse_weights: False
+weight_dir: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/regrid_weights/C9600
+reuse_weights: True
 
 # Variable names inside the NetCDF files
 variable_names:

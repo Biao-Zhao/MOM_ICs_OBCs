@@ -18,21 +18,21 @@
 ########################################################################################################
 source $HOME/miniconda3/etc/profile.d/conda.sh
 conda activate regrid
-
+export PYTHONUNBUFFERED=1
 set -e
 
 # ======== User defined parameters ========
 
 # set 1: Perform download GLORYS data process. set 2: only make initial condition. set 3: only make bounday conditions.  set "all": run all steps
-MODE="1"
+MODE="3"
 echo "[INFO] Running mode: $MODE"
 
 # Start and end date
-START_DATE="2022-12-03"
-END_DATE="2022-12-04"
+START_DATE="2022-11-28"
+END_DATE="2022-12-03"
 
 # Specify START_HOUR will only generate single initial condition, otherwise comment this line out
-START_HOUR="00"
+START_HOUR="12"
 
 # use 6-hourly data in UTC, could be changed according needs, for example ("00" "06" "12" "18") or ("00" "01" "02" "03" "04" ........) 
 TIME_SLOTS=("00" "06" "12" "18")
@@ -41,7 +41,7 @@ TIME_SLOTS=("00" "06" "12" "18")
 SEGMENTS=("south" "north" "east")
 
 #grid cases
-res="C3200"
+res="C9600"
 
 #vertical levels
 NK="85"
@@ -51,6 +51,7 @@ BASE_DIR="/ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs"
 GLORYS_DIR="${BASE_DIR}/CMEMS"
 IC_OUTPUT_DIR="${BASE_DIR}/ICs/${res}/NK${NK}"
 OBC_OUTPUT_DIR="${BASE_DIR}/OBCs/${res}/NK${NK}"
+REGRID_WEIGHT_DIR="${BASE_DIR}/regrid_weights/${res}"
 
 # Paths of downloading, making initial $ open boundary condition scripts
 DOWNLOAD_SCRIPT="${BASE_DIR}/scripts/download/download_cmems_glorys.py"
@@ -156,6 +157,7 @@ glorys_salinity: ${SO_PATH}
 glorys_sea_surface_height: ${SSH_PATH}
 glorys_zonal_velocity: ${UOVO_PATH}
 glorys_meridional_velocity: ${UOVO_PATH}
+resolution: ${res}
 ssh_time: ${HOUR}
 # Paths to model grid files
 vgrid_file: ${VGRID_FILE}
@@ -170,7 +172,8 @@ max_lat: ${MAX_LAT}
 output_file: ${IC_File}
 
 # Whether to reuse existing regridding weights (if applicable)
-reuse_weights: False
+weight_dir: ${REGRID_WEIGHT_DIR}
+reuse_weights: True
 
 # Variable names inside the NetCDF files
 variable_names:
@@ -241,7 +244,9 @@ EOF
 cat <<EOF
 glorys_dir: ${BASE_DIR}/scripts/temp/${DATE_COMPACT}
 output_dir: ${BASE_DIR}/scripts/temp/
-hgrid: ${HGRID_FILE} 
+hgrid: ${HGRID_FILE}
+resolution: ${res}
+regrid_dir: ${REGRID_WEIGHT_DIR}
 ncrcat_years: true  # Set to false if you want to skip ncrcat_years
 ncrcat_names:
   - 'thetao'

@@ -1,8 +1,8 @@
-thetao_fn: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/CMEMS/20221201/glo12_rg_6h-i_20221201-18h_3D-thetao_hcst.nc
-so_fn: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/CMEMS/20221201/glo12_rg_6h-i_20221201-18h_3D-so_hcst.nc
-uovo_fn: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/CMEMS/20221201/glo12_rg_6h-i_20221201-18h_3D-uovo_hcst.nc
-ssh_fn: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/CMEMS/20221201/MOL_20221201.nc
-merged_fn: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/scripts/temp/20221201/merged_20221201-18.nc
+thetao_fn: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/CMEMS/20221203/glo12_rg_6h-i_20221203-18h_3D-thetao_hcst.nc
+so_fn: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/CMEMS/20221203/glo12_rg_6h-i_20221203-18h_3D-so_hcst.nc
+uovo_fn: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/CMEMS/20221203/glo12_rg_6h-i_20221203-18h_3D-uovo_hcst.nc
+ssh_fn: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/CMEMS/20221203/MOL_20221203.nc
+merged_fn: /ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/scripts/temp/20221203/merged_20221203-18.nc
 ssh_time: 18
 min_lon: -105
 max_lon: -35
