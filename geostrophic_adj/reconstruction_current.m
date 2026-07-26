@@ -1,10 +1,14 @@
-clearvars -except ICS ICS_GEO;
+clearvars -except ICS ICS_GEO RES;
 close all;
 addpath(genpath('/gpfs/f6/bil-coastal-gfdl/scratch/Biao.Zhao/matlab_toolbox/m_map'));
 addpath(genpath('/gpfs/f6/bil-coastal-gfdl/scratch/Biao.Zhao/matlab_toolbox/othercolor'));
 
-maskname='../../grid/C3200/ocean_mask.nc';
-toponame='../../grid/C3200/topog.nc';
+maskname=strcat('/ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/grid/', RES, '/ocean_mask.nc');
+toponame=strcat('/ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/grid/', RES, '/topog.nc');
+hgridname=strcat('/ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/grid/', RES, '/ocean_hgrid.nc');
+disp(['Reading:' maskname]);
+disp(['Reading:' toponame]);
+disp(['Reading:' hgridname]);
 new_ini=strcat(ICS_GEO);disp(new_ini);
 old_ini=strcat(ICS);disp(old_ini);
 tini=0;
@@ -25,6 +29,13 @@ varidmask = netcdf.inqVarID(ncid, 'mask');
 maskT = netcdf.getVar(ncid, varidmask,'double');
 varidarea = netcdf.inqVarID(ncid, 'areaO');
 area = netcdf.getVar(ncid, varidarea,'double');
+netcdf.close(ncid);
+
+ncid = netcdf.open(hgridname, 'NC_NOWRITE');
+varid = netcdf.inqVarID(ncid, 'dx');
+dx_sg = netcdf.getVar(ncid, varid, 'double');
+varid = netcdf.inqVarID(ncid, 'dy');
+dy_sg = netcdf.getVar(ncid, varid, 'double');
 netcdf.close(ncid);
 
 % Original initial fileds from GLORYS 
@@ -62,28 +73,51 @@ V3d_org_T = 0.5*(V3d_org(:, 1:NY, :)   + V3d_org(:, 2:NY+1, :));  % (NX,NY,NK)
 
 [lat_yh2d,lon_xh2d]=meshgrid(lat_yh,lon_xh);
 f = 2*Omega*sin(pi*lat_yh2d/180);
-dy_T=3335.9525*ones(size(area,1),size(area,2));
-dx_T=area./dy_T;
 
-dy_u = zeros(NX+1,NY);
-dy_u(2:NX, :) = 0.5 * ( dy_T(1:NX-1, :) + dy_T(2:NX, :) );
-dy_u(1, :)     = dy_T(1, :);
-dy_u(NX+1, :) = dy_T(NX, :);
+assert(isequal(size(dx_sg), [2*NX, 2*NY+1]), ...
+    'dx_sg dimensions do not match the IC grid');
+assert(isequal(size(dy_sg), [2*NX+1, 2*NY]), ...
+    'dy_sg dimensions do not match the IC grid');
 
-dy_v = zeros(NX,NY+1);
-dy_v(:,2:NY)   = 0.5*(dy_T(:,1:NY-1) + dy_T(:,2:NY));
-dy_v(:,1)      = dy_T(:,1);
-dy_v(:,NY+1)   = dy_T(:,NY);
+dy_u = dy_sg(1:2:end, 1:2:end) ...
+     + dy_sg(1:2:end, 2:2:end);
 
-dx_v = zeros(NX, NY+1);
-dx_v(:, 2:NY) = 0.5 * ( dx_T(:, 1:NY-1) + dx_T(:, 2:NY) );
-dx_v(:,1)     = dx_T(:,1);
-dx_v(:,NY+1) = dx_T(:,NY);
+dx_v = dx_sg(1:2:end, 1:2:end) ...
+     + dx_sg(2:2:end, 1:2:end);
 
-dx_u = zeros(NX+1,NY);
-dx_u(2:NX,:)   = 0.5*(dx_T(1:NX-1,:) + dx_T(2:NX,:));
-dx_u(1,:)      = dx_T(1,:);
-dx_u(NX+1,:)   = dx_T(NX,:);
+dx_u = zeros(NX+1, NY);
+
+dx_u(2:NX,:) = ...
+    dx_sg(2:2:2*NX-2, 2:2:2*NY) ...
+  + dx_sg(3:2:2*NX-1, 2:2:2*NY);
+
+dx_u(1,:) = dx_sg(1, 2:2:2*NY);
+dx_u(NX+1,:) = dx_sg(2*NX, 2:2:2*NY);
+
+dy_v = zeros(NX, NY+1);
+
+dy_v(:,2:NY) = ...
+    dy_sg(2:2:2*NX, 2:2:2*NY-2) ...
+  + dy_sg(2:2:2*NX, 3:2:2*NY-1);
+
+dy_v(:,1) = dy_sg(2:2:2*NX, 1);
+dy_v(:,NY+1) = dy_sg(2:2:2*NX, 2*NY);
+
+dx_T = zeros(NX, NY);
+dx_T(1:NX-1,:) = dx_u(2:NX,:);
+dx_T(NX,:) = dx_u(NX,:);
+
+dy_T = zeros(NX, NY);
+dy_T(:,1:NY-1) = dy_v(:,2:NY);
+dy_T(:,NY) = dy_v(:,NY);
+
+fprintf('dx_T range: %.2f - %.2f m\n', ...
+    min(dx_T(:)), max(dx_T(:)));
+
+fprintf('dy_T range: %.2f - %.2f m\n', ...
+    min(dy_T(:)), max(dy_T(:)));
+
+clear dx_sg dy_sg;
 
 umask = zeros(NX+1, NY);       % (NX+1, NY)
 umask(2:NX,:)   = maskT(1:NX-1,:) .* maskT(2:NX,:);

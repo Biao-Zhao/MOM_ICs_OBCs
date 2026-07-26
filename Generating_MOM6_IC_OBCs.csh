@@ -5,14 +5,14 @@ set basedir = "/gpfs/f6/bil-coastal-gfdl/scratch/Biao.Zhao/MOM_ICs_OBCs"
 set rundir = "/ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs/scripts"
 
 #model resolution
-set res = 3200
+set res = 9600
 set NK  = 85
 # hh_list can be set to (00 06 12 18)
-set hh_list = (12)
+set hh_list = (18)
 
 set year = 2022
 set months = (11)#(01 02 03 04 05 06 07 08 09 10 11 12)
-set days = (28)
+set days = (26)
 
 #Specify the number of days of boundary conditions to be generated
 set duration = 3
@@ -54,7 +54,7 @@ foreach mon ($months)
       if (! -d $OBCS) then
          set mode = 3
          echo "Generating Boundary Conditions: $mode"
-        ${rundir}/prepare_MOM6_inputs.sh ${CDATE_FMT} ${hh} ${EDATE_FMT} ${mode} >>& stdout/making_ICS_OBCs_${CDATE}.log
+         ${rundir}/prepare_MOM6_inputs.sh ${CDATE_FMT} ${hh} ${EDATE_FMT} ${mode} >>& stdout/making_ICS_OBCs_${CDATE}.log
       else
          echo " OBCS already exists: $OBCS, please double-check"
       endif
@@ -62,8 +62,20 @@ foreach mon ($months)
       if ( $recontr ) then
         set ICS_GEO  = ${basedir}/ICs/C${res}/NK${NK}/MOM6_IC_${CDATE}${hh}_C${res}_geocurrents.nc
         echo "Reconstruct geostrophic currents"
-        matlab -nodisplay -nosplash -r "ICS='$ICS'; ICS_GEO='$ICS_GEO'; run('${rundir}/geostrophic_adj/reconstruction_current.m'); exit"  >>& stdout/making_ICS_OBCs_${CDATE}.log
-      endif 
+        #matlab -nodisplay -nosplash -r "ICS='$ICS'; ICS_GEO='$ICS_GEO'; RES='C$res'; run('${rundir}/geostrophic_adj/reconstruction_current.m'); exit"  >>& stdout/making_ICS_OBCs_${CDATE}.log
+        matlab -nodisplay -nosplash -batch "ICS='$ICS'; ICS_GEO='$ICS_GEO'; RES='C$res'; run('${rundir}/geostrophic_adj/reconstruction_current.m')" >>& stdout/making_ICS_OBCs_${CDATE}.log
+        set matlab_status = $status
+        if ( $matlab_status != 0 ) then
+           echo "[ERROR] MATLAB failed"
+           exit 1
+        endif
+        if ( ! -e "$ICS_GEO" ) then
+           echo "[ERROR] Output file was not created"
+           exit 1
+        endif
+        echo "MATLAB completed successfully"
+      endif
+       
 
     end   # hh
   end     # dd
