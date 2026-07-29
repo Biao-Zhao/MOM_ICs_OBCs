@@ -172,8 +172,8 @@ signal is most apparent.
 
 <table>
   <tr>
-    <th>Original source-derived velocity IC</th>
-    <th>Geostrophically reconstructed velocity IC</th>
+    <th>Initialized from original IC</th>
+    <th>Initialized from reconstructed IC</th>
   </tr>
   <tr>
     <td><img src="docs/media/original.gif" alt="SSH evolution with original currents" width="100%"></td>
