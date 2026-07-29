@@ -56,11 +56,7 @@ mass fields and then adds a depth-independent correction to reduce transport
 divergence on the target MOM6 grid.
 
 Two versions of the code are provided. They follow the same physical and
-numerical procedure and produce nearly identical adjusted currents. The small
-remaining differences mainly arise from floating-point roundoff and
-implementation-dependent operation ordering, especially during the iterative
-Poisson solve, where the convergence histories can differ slightly even when
-the same tolerance is used.
+numerical procedure and produce nearly identical adjusted currents.
 
 ### Numerical procedure
 
