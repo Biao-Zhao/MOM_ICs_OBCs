@@ -1,110 +1,234 @@
-# prepare_MOM6_inputs.sh
-### Automated CMEMS GLORYS Data Processing for MOM6
+# MOM6 Initial and Open-Boundary Conditions from CMEMS GLORYS
 
-**Author:** Biao Zhao  
-**Date:** 2025-10-04  
+This repository prepares regional [MOM6](https://github.com/NOAA-GFDL/MOM6)
+initial conditions (ICs) and open-boundary conditions (OBCs) from CMEMS
+GLORYS ocean analysis data. It provides a workflow for downloading regional
+source fields, horizontally and vertically remapping them to a MOM6 grid,
+writing model-ready NetCDF files, and optionally reconstructing a dynamically
+balanced three-dimensional current field.
 
----
+The workflow is designed for high-resolution regional applications and has
+been used with C3200 and C9600 grids.
 
-## Overview
+## Workflow
 
-This script integrates the Python scripts developed by **Dr. Jing Chen** for processing MOM6 initial and boundary conditions. It automates the downloading and processing of **CMEMS GLORYS analysis data**, generating **initial** and **open boundary condition** files for regional MOM6.
-
-Main functions:
-1. Download CMEMS GLORYS data  
-2. Create MOM6 Initial Condition (IC) files  
-3. Create MOM6 Open Boundary Condition (OBC) files  
-
-Each step can be executed separately or together.
-
----
-
-## Quick Start
-
-Make the script executable:
-
-```bash
-chmod +x prepare_MOM6_inputs.sh
+```text
+CMEMS GLORYS
+     |
+     +--> Download regional source fields
+     |
+     +--> Horizontal and vertical remapping
+     |       |
+     |       +--> MOM6 initial condition
+     |       |
+     |       +--> MOM6 open-boundary conditions
+     |
+     +--> Optional geostrophic adjustment
+             |
+             +--> SSH-referenced surface current
+             +--> Density and thermal-wind shear
+             +--> Three-dimensional geostrophic current
+             +--> Barotropic transport correction
+             +--> Adjusted MOM6 initial condition
 ```
 
-Run the script with the default settings defined inside the file:
+Initial-condition generation uses reusable horizontal-interpolation weights.
+The first run is slower because the weight files must be generated and written.
+For a C9600 grid (`6145 × 3169`), this normally takes about 15–20 minutes.
+Later runs on the same source and target grids can read the existing weights
+and usually complete in about 5 minutes.
 
-```bash
-./prepare_MOM6_inputs.sh
+## Geostrophic adjustment
+
+### Motivation
+
+Directly interpolating GLORYS velocity onto a regional MOM6 C-grid does not
+guarantee dynamical consistency with the separately remapped SSH,
+temperature, salinity, target bathymetry, wet mask, and horizontal grid
+metrics. During model spin-up, the ocean adjusts to this imbalance by
+emitting spurious gravity waves, whose influence can persist for approximately
+6–10 hours.
+
+The geostrophic-adjustment module reconstructs velocity from the remapped
+mass fields and then adds a depth-independent correction to reduce transport
+divergence on the target MOM6 grid.
+
+Two versions of the code are provided. They follow the same physical and
+numerical procedure and produce nearly identical adjusted currents. The small
+remaining differences mainly arise from floating-point roundoff and
+implementation-dependent operation ordering, especially during the iterative
+Poisson solve, where the convergence histories can differ slightly even when
+the same tolerance is used.
+
+### Numerical procedure
+
+1. **Density**
+
+   In-situ density is calculated from potential temperature, salinity, and
+   layer depth using the Jackett and McDougall equation of state in both code
+   versions.
+
+2. **SSH-referenced surface current**
+
+   On tracer cells,
+
+   \[
+   u_s=-\frac{g}{f}\frac{\partial\eta}{\partial y},
+   \qquad
+   v_s=\frac{g}{f}\frac{\partial\eta}{\partial x}.
+   \]
+
+   Horizontal derivatives are evaluated with the real MOM6 distances derived
+   from `ocean_hgrid.nc` and are masked across land.
+
+3. **Thermal-wind shear and C-grid placement**
+
+   Density gradients provide the vertical shear:
+
+   \[
+   \frac{\partial u}{\partial z}
+   =-\frac{g}{\rho_0 f}\frac{\partial\rho}{\partial y},
+   \qquad
+   \frac{\partial v}{\partial z}
+   =\frac{g}{\rho_0 f}\frac{\partial\rho}{\partial x}.
+   \]
+
+   The shear is integrated downward from the SSH-referenced surface current.
+   Wet masks are applied at every vertical level so that gradients are not
+   evaluated through land or below topography. The resulting tracer-cell
+   currents are then interpolated once to MOM6 U and V faces.
+   Three-dimensional face masks enforce zero velocity below the target
+   bathymetry.
+
+4. **Depth-integrated transport correction**
+
+   The reconstructed U/V fields are vertically integrated. A Poisson equation
+   is solved for a scalar correction potential using the target MOM6
+   `dx`, `dy`, `areaO`, depth, and wet mask. Its horizontal gradient supplies
+   a depth-independent velocity correction:
+
+   \[
+   u_{\mathrm{adjusted}}=u_{\mathrm{geo}}+u_c,
+   \qquad
+   v_{\mathrm{adjusted}}=v_{\mathrm{geo}}+v_c.
+   \]
+
+   For C9600, the barotropic correction currently takes about 20 minutes and
+   is the most expensive part of the geostrophic adjustment. This optional
+   step can be optimized further or disabled when transport-divergence
+   correction is not required.
+
+### Example results
+
+The animations below show example sea-surface-height evolution from
+experiments initialized with the directly interpolated and reconstructed
+velocity fields.
+
+<table>
+  <tr>
+    <th>Original GLORYS-derived velocity IC</th>
+    <th>Geostrophically reconstructed velocity IC</th>
+  </tr>
+  <tr>
+    <td><img src="docs/media/original.gif" alt="SSH evolution with original currents" width="100%"></td>
+    <td><img src="docs/media/reconstruction.gif" alt="SSH evolution with reconstructed currents" width="100%"></td>
+  </tr>
+</table>
+
+The zonal-current section shows that the reconstruction preserves the major
+vertical current structures present in GLORYS while placing them consistently
+on the target grid and bathymetry.
+
+<p align="center">
+  <img src="docs/media/cross_section.png" alt="GLORYS and reconstructed zonal-current sections" width="100%">
+</p>
+
+The barotropic correction substantially reduces the depth-integrated
+transport divergence. Both panels below use the same color range.
+
+<p align="center">
+  <img src="docs/media/divergence.png" alt="Depth-integrated divergence before and after adjustment" width="100%">
+</p>
+
+## Running the workflow
+
+### Batch processing
+
+For routine production, edit the dates, hours, resolution, vertical levels,
+boundary duration, and geostrophic-adjustment switch in
+`Generating_MOM6_IC_OBCs.csh`, then run:
+
+```csh
+tcsh Generating_MOM6_IC_OBCs.csh
 ```
 
-The script also supports optional runtime arguments:
+### Manual processing
+
+Run a selected stage directly with:
 
 ```bash
 ./prepare_MOM6_inputs.sh START_DATE START_HOUR END_DATE MODE
 ```
 
-For example:
+## Grid and source data
 
-```bash
-./prepare_MOM6_inputs.sh 2022-11-24 00 2022-12-03 1
+The production grid directory for each resolution should contain:
+
+```text
+grid/<resolution>/
+├── ocean_hgrid.nc
+├── ocean_mask.nc
+├── topog.nc
+└── vgrid_<NK>.nc
 ```
 
-This is equivalent to setting:
+The CMEMS source fields used by the workflow are:
 
-```bash
-START_DATE="2022-11-24"
-START_HOUR="00"
-END_DATE="2022-12-03"
-MODE="1"
+- potential temperature (`thetao`);
+- salinity (`so`);
+- zonal and meridional velocity (`uo`, `vo`);
+- sea-surface height.
+
+## Repository layout
+
+```text
+MOM_ICs_OBCs/
+├── download/
+│   └── download_cmems_glorys.py
+├── initial/
+│   ├── write_MOM6_IC.py
+│   ├── depths.py
+│   └── glorys_IC_*.yaml
+├── boundary/
+│   ├── merge_glorys.py
+│   ├── write_MOM6_OBC.py
+│   └── boundary.py
+├── geostrophic_adj/
+│   ├── matlab/
+│   │   ├── reconstruction_current.m
+│   │   ├── make_geostrophic_current.m
+│   │   ├── build_poisson_T.m
+│   │   └── rho_eos.m
+│   └── python/
+│       └── reconstruction_current.py
+├── prepare_MOM6_inputs.sh
+└── Generating_MOM6_IC_OBCs.csh
 ```
 
-If an argument is not provided, the corresponding default value defined inside `prepare_MOM6_inputs.sh` will be used.
+## Example outputs
 
----
-
-## Available Modes
-
-```bash
-MODE="1"    # download CMEMS GLORYS data only
-MODE="2"    # generate MOM6 initial condition only
-MODE="3"    # generate MOM6 open boundary conditions only
-MODE="all"  # run all steps
+```text
+ICs/C3200/NK85/MOM6_IC_2022112812_C3200.nc
+ICs/C3200/NK85/MOM6_IC_2022112812_C3200_geocurrents.nc
+OBCs/C3200/NK85/2022112812/thetao_001.nc
+OBCs/C3200/NK85/2022112812/so_001.nc
+OBCs/C3200/NK85/2022112812/zos_001.nc
+OBCs/C3200/NK85/2022112812/uv_001.nc
 ```
----
-Set parameters (time range, region, resolution, etc.) in the user-defined section of the script before running.
 
-## Directory Structure
-Below is the expected directory organization under `BASE_DIR`.  
-This structure ensures that downloaded data, grid files, and processing scripts are properly located.
+## Acknowledgements
 
-```
-BASE_DIR/
-├── CMEMS/ → Downloaded GLORYS data
-│
-├── ICs/<res>/ → MOM6 initial condition outputs
-│
-├── OBCs/<res>/ → MOM6 boundary condition outputs
-│
-├── grid/<res>/ → MOM6 grid and vertical coordinate files
-│
-└── scripts/
-├── download/ → download_cmems_glorys.py
-├── initial/ → write_MOM6_IC.py
-└── boundary/ → merge_glorys.py, write_MOM6_OBC.py
+Workflow development and geostrophic-adjustment integration: **Biao Zhao**.
 
-```   
----
-
-## Workflow
-
-The process consists of three main steps that can be executed separately or together.
-```
-Step 1 → Download GLORYS data
-Step 2 → Generate MOM6 initial condition
-Step 3 → Generate MOM6 open boundary condition
-```
----
-
-## Example Outputs
-```
-ICs/C3200/MOM6_IC_2024092000_C3200.nc
-OBCs/C3200/20240920/thetao_001.nc
-OBCs/C3200/20240920/so_002.nc
-OBCs/C3200/20240920/uv_003.nc
-```
+The IC and OBC preparation workflow incorporates Python processing tools
+developed by **Dr. Jing Chen**.
