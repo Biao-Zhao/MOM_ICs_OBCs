@@ -36,7 +36,7 @@ Initial-condition generation uses reusable horizontal-interpolation weights.
 The first run is slower because the weight files must be generated and written.
 For a C9600 grid (`6145 × 3169`), this normally takes about 15–20 minutes.
 Later runs on the same source and target grids can read the existing weights
-and usually complete in about 5 minutes.
+and usually complete in about 3 minutes.
 
 ## Geostrophic adjustment
 
