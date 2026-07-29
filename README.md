@@ -172,8 +172,7 @@ full pathway and major spatial structure of the Gulf Stream.
 </p>
 
 The zonal-current section shows that the reconstruction preserves the major
-vertical current structures present in the source product while placing them
-consistently on the target grid and bathymetry.
+vertical current structures present in the source product.
 
 <p align="center">
   <img src="docs/media/cross_section.png" alt="Source and reconstructed zonal-current sections" width="100%">
