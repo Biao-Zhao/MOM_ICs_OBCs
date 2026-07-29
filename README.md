@@ -126,6 +126,9 @@ the same tolerance is used.
    \end{aligned}
    ```
 
+   Here, z′ is the vertical integration coordinate, while z is the target
+   depth at which the geostrophic current is evaluated.
+
    Wet masks are applied at every vertical level so that gradients are not
    evaluated through land or below topography. The resulting tracer-cell
    currents are then interpolated once to MOM6 U and V faces.
