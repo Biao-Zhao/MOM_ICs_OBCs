@@ -242,7 +242,7 @@ Examples:
 
 ## Grid and source data
 
-The production grid directory for each resolution should contain:
+The **grid** directory for each resolution should contain:
 
 ```text
 grid/<resolution>/
