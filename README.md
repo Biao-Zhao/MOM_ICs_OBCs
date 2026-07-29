@@ -181,6 +181,10 @@ signal is most apparent.
   </tr>
 </table>
 
+<p align="center">
+  <img src="docs/media/suface_current.png" alt="Surface current comparison" width="100%">
+</p>
+
 The zonal-current section shows that the reconstruction preserves the major
 vertical current structures present in the source product while placing them
 consistently on the target grid and bathymetry.
