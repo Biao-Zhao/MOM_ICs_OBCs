@@ -63,8 +63,8 @@ foreach mon ($months)
          set mode = 4
          echo "Reconstructing geostrophic currents: mode=$mode"
          set ICS_GEO  = ${basedir}/ICs/C${res}/NK${NK}/MOM6_IC_${CDATE}${hh}_C${res}_geocurrents_matlab.nc
-         matlab -nodisplay -nosplash -batch "ICS='$ICS'; ICS_GEO='$ICS_GEO'; RES='C$res'; run('${rundir}/geostrophic_adj/matlab/reconstruction_current.m')" >>& stdout/making_ICS_OBCs_${CDATE}.log
-         #${rundir}/prepare_MOM6_inputs.sh ${CDATE_FMT} ${hh} ${EDATE_FMT} ${mode} >>& stdout/making_ICS_OBCs_${CDATE}.log
+         #matlab -nodisplay -nosplash -batch "ICS='$ICS'; ICS_GEO='$ICS_GEO'; RES='C$res'; run('${rundir}/geostrophic_adj/matlab/reconstruction_current.m')" >>& stdout/making_ICS_OBCs_${CDATE}.log
+         ${rundir}/prepare_MOM6_inputs.sh ${CDATE_FMT} ${hh} ${EDATE_FMT} ${mode} >>& stdout/making_ICS_OBCs_${CDATE}.log
 
          set prepare_status = $status
          if ($prepare_status != 0) then
