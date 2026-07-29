@@ -73,26 +73,26 @@ the same tolerance is used.
 
    On tracer cells,
 
-   $$
+   ```math
    u_s=-\frac{g}{f}\frac{\partial\eta}{\partial y},
    \qquad
    v_s=\frac{g}{f}\frac{\partial\eta}{\partial x}.
-   $$
+   ```
 
    Horizontal derivatives are evaluated with the real MOM6 distances derived
    from `ocean_hgrid.nc` and are masked across land.
 
-3. **Thermal-wind shear and C-grid placement**
+3. **Thermal-wind shear**
 
    Density gradients provide the vertical shear:
 
-   $$
+   ```math
    \frac{\partial u}{\partial z}
    =-\frac{g}{\rho_0 f}\frac{\partial\rho}{\partial y},
    \qquad
    \frac{\partial v}{\partial z}
    =\frac{g}{\rho_0 f}\frac{\partial\rho}{\partial x}.
-   $$
+   ```
 
    The shear is integrated downward from the SSH-referenced surface current.
    Wet masks are applied at every vertical level so that gradients are not
@@ -108,16 +108,16 @@ the same tolerance is used.
    `dx`, `dy`, `areaO`, depth, and wet mask. Its horizontal gradient supplies
    a depth-independent velocity correction:
 
-   $$
+   ```math
    u_{\mathrm{adjusted}}=u_{\mathrm{geo}}+u_c,
    \qquad
    v_{\mathrm{adjusted}}=v_{\mathrm{geo}}+v_c.
-   $$
+   ```
 
    For C9600, the barotropic correction currently takes about 20 minutes and
    is the most expensive part of the geostrophic adjustment. This optional
-   step can be optimized further or disabled when transport-divergence
-   correction is not required.
+   step, the transport-divergence correction, can be optimized further or
+   disabled.
 
 ### Example results
 
@@ -160,7 +160,7 @@ boundary duration, and geostrophic-adjustment switch in
 `Generating_MOM6_IC_OBCs.csh`, then run:
 
 ```csh
-tcsh Generating_MOM6_IC_OBCs.csh
+./Generating_MOM6_IC_OBCs.csh
 ```
 
 ### Manual processing
