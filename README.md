@@ -71,12 +71,17 @@ the same tolerance is used.
 
 2. **SSH-referenced surface current**
 
-   On tracer cells,
+   From the sea-surface height, the surface geostrophic current is derived as
 
    ```math
-   u_s=-\frac{g}{f}\frac{\partial\eta}{\partial y},
-   \qquad
-   v_s=\frac{g}{f}\frac{\partial\eta}{\partial x}.
+   \begin{aligned}
+   u_g^{\mathrm{surf}}(x,y)
+   &= -\frac{g}{f(x,y)}
+      \frac{\partial\eta(x,y)}{\partial y}, \\
+   v_g^{\mathrm{surf}}(x,y)
+   &= \frac{g}{f(x,y)}
+      \frac{\partial\eta(x,y)}{\partial x}.
+   \end{aligned}
    ```
 
    Horizontal derivatives are evaluated with the real MOM6 distances derived
@@ -84,17 +89,42 @@ the same tolerance is used.
 
 3. **Thermal-wind shear**
 
-   Density gradients provide the vertical shear:
+   The vertical shear of the geostrophic current satisfies the thermal-wind
+   equations:
 
    ```math
-   \frac{\partial u}{\partial z}
-   =-\frac{g}{\rho_0 f}\frac{\partial\rho}{\partial y},
-   \qquad
-   \frac{\partial v}{\partial z}
-   =\frac{g}{\rho_0 f}\frac{\partial\rho}{\partial x}.
+   \begin{aligned}
+   \frac{\partial u_g}{\partial z}
+   &= -\frac{g}{f(x,y)\rho_0}
+      \frac{\partial\rho(T,S,z)}{\partial y}, \\
+   \frac{\partial v_g}{\partial z}
+   &= \frac{g}{f(x,y)\rho_0}
+      \frac{\partial\rho(T,S,z)}{\partial x}.
+   \end{aligned}
    ```
 
-   The shear is integrated downward from the SSH-referenced surface current.
+   Integrating these shears downward from the SSH-referenced surface current
+   gives
+
+   ```math
+   \begin{aligned}
+   u_g(x,y,z)
+   &= u_g^{\mathrm{surf}}(x,y)
+      + \int_0^z
+      \left[
+      -\frac{g}{f(x,y)\rho_0}
+      \frac{\partial\rho(T,S,z')}{\partial y}
+      \right]\,dz', \\
+   v_g(x,y,z)
+   &= v_g^{\mathrm{surf}}(x,y)
+      + \int_0^z
+      \left[
+      \frac{g}{f(x,y)\rho_0}
+      \frac{\partial\rho(T,S,z')}{\partial x}
+      \right]\,dz'.
+   \end{aligned}
+   ```
+
    Wet masks are applied at every vertical level so that gradients are not
    evaluated through land or below topography. The resulting tracer-cell
    currents are then interpolated once to MOM6 U and V faces.
