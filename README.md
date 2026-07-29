@@ -46,9 +46,10 @@ and usually complete in about 5 minutes.
 Directly interpolating velocity from the source product onto a regional MOM6
 C-grid does not guarantee dynamical consistency with the separately remapped
 SSH, temperature, salinity, target bathymetry, wet mask, and horizontal grid
-metrics. During model spin-up, the ocean adjusts to this imbalance by emitting
-spurious gravity waves, whose influence can persist for approximately 6–10
-hours.
+metrics. This imbalance can therefore be introduced by remapping itself and
+can exist even when the optional geostrophic adjustment is not run. During
+model spin-up, the ocean adjusts to the imbalance by emitting spurious gravity
+waves, whose influence can persist for approximately 6–10 hours.
 
 The geostrophic-adjustment module reconstructs velocity from the remapped
 mass fields and then adds a depth-independent correction to reduce transport
@@ -133,16 +134,16 @@ the same tolerance is used.
 
 4. **Depth-integrated transport correction**
 
-   The reconstructed geostrophic velocity is integrated over depth to obtain
-   the barotropic transport. For the balanced initial state targeted here,
-   this transport should be nearly divergence-free, but a small residual
-   generally remains:
+   Whether velocity is directly remapped or geostrophically reconstructed,
+   its depth-integrated transport on the target grid can contain a residual
+   divergence. Remapping alone can produce this problem because it does not
+   exactly preserve the source-grid barotropic continuity constraint:
 
    ```math
-   \mathbf{M}_g
-   = \int_{-H}^{0}\mathbf{u}_g\,dz,
+   \mathbf{M}
+   = \int_{-H}^{0}\mathbf{u}\,dz,
    \qquad
-   D = \nabla\cdot\mathbf{M}_g \ne 0.
+   D = \nabla\cdot\mathbf{M} \ne 0.
    ```
 
    A scalar potential, χ, is then obtained from a Poisson equation. Its
@@ -153,7 +154,7 @@ the same tolerance is used.
    \begin{aligned}
    \nabla\cdot(H\nabla\chi) &= -D, \\
    \mathbf{u}_{\mathrm{adjusted}}
-   &= \mathbf{u}_g+\nabla\chi, \\
+   &= \mathbf{u}+\nabla\chi, \\
    \nabla\cdot
    \int_{-H}^{0}\mathbf{u}_{\mathrm{adjusted}}\,dz
    &\approx 0.
@@ -215,6 +216,29 @@ Run a selected stage directly with:
 
 ```bash
 ./prepare_MOM6_inputs.sh START_DATE START_HOUR END_DATE MODE
+```
+
+`MODE` selects the processing stage:
+
+| `MODE` | Processing stage |
+|---:|---|
+| `1` | Download source data |
+| `2` | Generate an initial condition |
+| `3` | Generate open-boundary conditions |
+| `4` | Reconstruct geostrophic currents from an existing initial condition |
+| `all` | Run modes 1–3 in sequence; mode 4 is not included |
+
+Examples:
+
+```bash
+# Generate one initial condition
+./prepare_MOM6_inputs.sh 2022-11-28 12 2022-11-28 2
+
+# Generate open-boundary conditions over a date range
+./prepare_MOM6_inputs.sh 2022-11-28 12 2022-12-01 3
+
+# Reconstruct geostrophic currents for an existing initial condition
+./prepare_MOM6_inputs.sh 2022-11-28 12 2022-11-28 4
 ```
 
 ## Grid and source data
