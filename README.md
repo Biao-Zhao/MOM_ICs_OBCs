@@ -164,6 +164,13 @@ numerical procedure and produce nearly identical adjusted currents.
 
 ### Example results
 
+The surface-current comparison shows that the reconstruction preserves the
+full pathway and major spatial structure of the Gulf Stream.
+
+<p align="center">
+  <img src="docs/media/suface_current.png" alt="Surface current comparison" width="100%">
+</p>
+
 The zonal-current section shows that the reconstruction preserves the major
 vertical current structures present in the source product while placing them
 consistently on the target grid and bathymetry.
@@ -198,12 +205,7 @@ signal is most apparent.
   </tr>
 </table>
 
-The surface-current comparison shows that the reconstruction preserves the
-full pathway and major spatial structure of the Gulf Stream.
 
-<p align="center">
-  <img src="docs/media/suface_current.png" alt="Surface current comparison" width="100%">
-</p>
 ## Running the workflow
 
 ### Batch processing
