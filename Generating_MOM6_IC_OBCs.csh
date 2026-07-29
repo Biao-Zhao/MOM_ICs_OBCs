@@ -46,7 +46,7 @@ foreach mon ($months)
       if (! -f $ICS ) then
          set mode = 2
          echo "Generating Initial Conditions: $mode" 
-         ${rundir}/prepare_MOM6_inputs.sh ${CDATE_FMT} ${hh} ${EDATE_FMT} ${mode} >>& stdout/making_ICS_OBCs_${CDATE}.log 
+         #${rundir}/prepare_MOM6_inputs.sh ${CDATE_FMT} ${hh} ${EDATE_FMT} ${mode} >>& stdout/making_ICS_OBCs_${CDATE}.log 
       else
          echo " ICS already exists: $ICS, please double-check"
       endif
@@ -54,26 +54,23 @@ foreach mon ($months)
       if (! -d $OBCS) then
          set mode = 3
          echo "Generating Boundary Conditions: $mode"
-         ${rundir}/prepare_MOM6_inputs.sh ${CDATE_FMT} ${hh} ${EDATE_FMT} ${mode} >>& stdout/making_ICS_OBCs_${CDATE}.log
+         #${rundir}/prepare_MOM6_inputs.sh ${CDATE_FMT} ${hh} ${EDATE_FMT} ${mode} >>& stdout/making_ICS_OBCs_${CDATE}.log
       else
          echo " OBCS already exists: $OBCS, please double-check"
       endif
 
       if ( $recontr ) then
-        set ICS_GEO  = ${basedir}/ICs/C${res}/NK${NK}/MOM6_IC_${CDATE}${hh}_C${res}_geocurrents.nc
-        echo "Reconstruct geostrophic currents"
-        #matlab -nodisplay -nosplash -r "ICS='$ICS'; ICS_GEO='$ICS_GEO'; RES='C$res'; run('${rundir}/geostrophic_adj/reconstruction_current.m'); exit"  >>& stdout/making_ICS_OBCs_${CDATE}.log
-        matlab -nodisplay -nosplash -batch "ICS='$ICS'; ICS_GEO='$ICS_GEO'; RES='C$res'; run('${rundir}/geostrophic_adj/reconstruction_current.m')" >>& stdout/making_ICS_OBCs_${CDATE}.log
-        set matlab_status = $status
-        if ( $matlab_status != 0 ) then
-           echo "[ERROR] MATLAB failed"
-           exit 1
-        endif
-        if ( ! -e "$ICS_GEO" ) then
-           echo "[ERROR] Output file was not created"
-           exit 1
-        endif
-        echo "MATLAB completed successfully"
+         set mode = 4
+         echo "Reconstructing geostrophic currents: mode=$mode"
+         set ICS_GEO  = ${basedir}/ICs/C${res}/NK${NK}/MOM6_IC_${CDATE}${hh}_C${res}_geocurrents_matlab.nc
+         matlab -nodisplay -nosplash -batch "ICS='$ICS'; ICS_GEO='$ICS_GEO'; RES='C$res'; run('${rundir}/geostrophic_adj/matlab/reconstruction_current.m')" >>& stdout/making_ICS_OBCs_${CDATE}.log
+         #${rundir}/prepare_MOM6_inputs.sh ${CDATE_FMT} ${hh} ${EDATE_FMT} ${mode} >>& stdout/making_ICS_OBCs_${CDATE}.log
+
+         set prepare_status = $status
+         if ($prepare_status != 0) then
+           echo "[ERROR] Geostrophic-current reconstruction failed"
+           exit $prepare_status
+         endif
       endif
        
 

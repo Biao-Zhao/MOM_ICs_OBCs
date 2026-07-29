@@ -23,7 +23,9 @@ set -e
 
 # ======== User defined parameters ========
 
-# set 1: Perform download GLORYS data process. set 2: only make initial condition. set 3: only make bounday conditions.  set "all": run all steps
+# set 1: Perform download GLORYS data process. set 2: only make initial condition. 
+# set 3: only make bounday conditions.         set 4: only reconstruct geostrophic currents.
+# set "all": run all steps
 MODE="3"
 echo "[INFO] Running mode: $MODE"
 
@@ -58,7 +60,7 @@ DOWNLOAD_SCRIPT="${BASE_DIR}/scripts/download/download_cmems_glorys.py"
 INITIAL_SCRIPT="${BASE_DIR}/scripts/initial/write_MOM6_IC.py"
 BOUNDARY_MERGE_SCRIPT="${BASE_DIR}/scripts/boundary/merge_glorys.py"
 BOUNDARY_MAKE_SCRIPT="${BASE_DIR}/scripts/boundary/write_MOM6_OBC.py"
-
+GEO_RECONSTRUCTION_SCRIPT="${BASE_DIR}/scripts/geostrophic_adj/python/reconstruction_current.py"
 # vertical grid and horizontal superrid file of MOM6
 VGRID_FILE="${BASE_DIR}/grid/${res}/vgrid_${NK}.nc"
 HGRID_FILE="${BASE_DIR}/grid/${res}/ocean_hgrid.nc"
@@ -298,5 +300,54 @@ done
 echo "[INFO] Step 3 finished successfully."
 
 fi
+
+
+# ================= Step 4: Reconstruct geostrophic currents =================
+
+if [[ "${MODE}" == "4" ]]; then
+
+    DATE_COMPACT="${START_DATE//-/}"
+
+    if [[ -z "${START_HOUR}" ]]; then
+        echo "[ERROR] START_HOUR must be specified for mode=4."
+        exit 1
+    fi
+
+    IC_FILE="${IC_OUTPUT_DIR}/MOM6_IC_${DATE_COMPACT}${START_HOUR}_${res}.nc"
+
+    IC_GEO_FILE="${IC_OUTPUT_DIR}/MOM6_IC_${DATE_COMPACT}${START_HOUR}_${res}_geocurrents.nc"
+
+    GEO_PLOT_DIR="${IC_OUTPUT_DIR}/diagnostics_${DATE_COMPACT}${START_HOUR}"
+
+    echo "[INFO] Running mode 4: geostrophic-current reconstruction"
+    echo "[INFO] Input:  ${IC_FILE}"
+    echo "[INFO] Output: ${IC_GEO_FILE}"
+    echo "[INFO] Plots:  ${GEO_PLOT_DIR}"
+
+    if [[ ! -f "${IC_FILE}" ]]; then
+        echo "[ERROR] Initial-condition file does not exist:"
+        echo "        ${IC_FILE}"
+        exit 1
+    fi
+
+    if [[ -f "${IC_GEO_FILE}" ]]; then
+        echo "[INFO] Geostrophic IC already exists, skipping:"
+        echo "        ${IC_GEO_FILE}"
+    else
+    ${EXE} -u "${GEO_RECONSTRUCTION_SCRIPT}" \
+            --input "${IC_FILE}" \
+            --output "${IC_GEO_FILE}" \
+            --grid-dir "${BASE_DIR}/grid/${res}" \
+            --plot-dir "${GEO_PLOT_DIR}" \
+            --plot-format svg
+
+    echo "[INFO] Step 4 finished successfully."
+    fi
+
+else
+    echo "[INFO] Skipping Step 4 (geostrophic reconstruction)."
+fi
+
+
 
 echo "[INFO] All done"
