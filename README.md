@@ -181,6 +181,9 @@ signal is most apparent.
   </tr>
 </table>
 
+The surface-current comparison shows that the reconstruction preserves the
+full pathway and major spatial structure of the Gulf Stream.
+
 <p align="center">
   <img src="docs/media/suface_current.png" alt="Surface current comparison" width="100%">
 </p>
