@@ -302,5 +302,5 @@ OBCs/C3200/NK85/2022112812/uv_001.nc
 
 Workflow development and geostrophic-adjustment integration: **Biao Zhao**.
 
-The IC and OBC preparation workflow incorporates Python processing tools
+The IC and OBC preparation workflow incorporates the Python processing scripts
 developed by **Dr. Jing Chen**.
