@@ -249,7 +249,7 @@ grid/<resolution>/
 ├── ocean_hgrid.nc
 ├── ocean_mask.nc
 ├── topog.nc
-└── vgrid_<NK>.nc
+└── vgrid_NK85.nc
 ```
 
 The source fields obtained from the **Global Ocean Physics Analysis and
