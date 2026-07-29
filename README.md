@@ -1,11 +1,12 @@
-# MOM6 Initial and Open-Boundary Conditions from CMEMS GLORYS
+# MOM6 Initial and Open-Boundary Conditions
 
 This repository prepares regional [MOM6](https://github.com/NOAA-GFDL/MOM6)
-initial conditions (ICs) and open-boundary conditions (OBCs) from CMEMS
-GLORYS ocean analysis data. It provides a workflow for downloading regional
-source fields, horizontally and vertically remapping them to a MOM6 grid,
-writing model-ready NetCDF files, and optionally reconstructing a dynamically
-balanced three-dimensional current field.
+initial conditions (ICs) and open-boundary conditions (OBCs) from the
+Copernicus Marine **Global Ocean Physics Analysis and Forecast** product. It
+provides a workflow for downloading regional source fields, horizontally and
+vertically remapping them to a MOM6 grid, writing model-ready NetCDF files,
+and optionally reconstructing a dynamically balanced three-dimensional
+current field.
 
 The workflow is designed for high-resolution regional applications and has
 been used with C3200 and C9600 grids.
@@ -13,7 +14,7 @@ been used with C3200 and C9600 grids.
 ## Workflow
 
 ```text
-CMEMS GLORYS
+Global Ocean Physics Analysis and Forecast
      |
      +--> Download regional source fields
      |
@@ -42,12 +43,12 @@ and usually complete in about 5 minutes.
 
 ### Motivation
 
-Directly interpolating GLORYS velocity onto a regional MOM6 C-grid does not
-guarantee dynamical consistency with the separately remapped SSH,
-temperature, salinity, target bathymetry, wet mask, and horizontal grid
-metrics. During model spin-up, the ocean adjusts to this imbalance by
-emitting spurious gravity waves, whose influence can persist for approximately
-6–10 hours.
+Directly interpolating velocity from the source product onto a regional MOM6
+C-grid does not guarantee dynamical consistency with the separately remapped
+SSH, temperature, salinity, target bathymetry, wet mask, and horizontal grid
+metrics. During model spin-up, the ocean adjusts to this imbalance by emitting
+spurious gravity waves, whose influence can persist for approximately 6–10
+hours.
 
 The geostrophic-adjustment module reconstructs velocity from the remapped
 mass fields and then adds a depth-independent correction to reduce transport
@@ -72,11 +73,11 @@ the same tolerance is used.
 
    On tracer cells,
 
-   \[
+   $$
    u_s=-\frac{g}{f}\frac{\partial\eta}{\partial y},
    \qquad
    v_s=\frac{g}{f}\frac{\partial\eta}{\partial x}.
-   \]
+   $$
 
    Horizontal derivatives are evaluated with the real MOM6 distances derived
    from `ocean_hgrid.nc` and are masked across land.
@@ -85,13 +86,13 @@ the same tolerance is used.
 
    Density gradients provide the vertical shear:
 
-   \[
+   $$
    \frac{\partial u}{\partial z}
    =-\frac{g}{\rho_0 f}\frac{\partial\rho}{\partial y},
    \qquad
    \frac{\partial v}{\partial z}
    =\frac{g}{\rho_0 f}\frac{\partial\rho}{\partial x}.
-   \]
+   $$
 
    The shear is integrated downward from the SSH-referenced surface current.
    Wet masks are applied at every vertical level so that gradients are not
@@ -107,11 +108,11 @@ the same tolerance is used.
    `dx`, `dy`, `areaO`, depth, and wet mask. Its horizontal gradient supplies
    a depth-independent velocity correction:
 
-   \[
+   $$
    u_{\mathrm{adjusted}}=u_{\mathrm{geo}}+u_c,
    \qquad
    v_{\mathrm{adjusted}}=v_{\mathrm{geo}}+v_c.
-   \]
+   $$
 
    For C9600, the barotropic correction currently takes about 20 minutes and
    is the most expensive part of the geostrophic adjustment. This optional
@@ -126,7 +127,7 @@ velocity fields.
 
 <table>
   <tr>
-    <th>Original GLORYS-derived velocity IC</th>
+    <th>Original source-derived velocity IC</th>
     <th>Geostrophically reconstructed velocity IC</th>
   </tr>
   <tr>
@@ -136,11 +137,11 @@ velocity fields.
 </table>
 
 The zonal-current section shows that the reconstruction preserves the major
-vertical current structures present in GLORYS while placing them consistently
-on the target grid and bathymetry.
+vertical current structures present in the source product while placing them
+consistently on the target grid and bathymetry.
 
 <p align="center">
-  <img src="docs/media/cross_section.png" alt="GLORYS and reconstructed zonal-current sections" width="100%">
+  <img src="docs/media/cross_section.png" alt="Source and reconstructed zonal-current sections" width="100%">
 </p>
 
 The barotropic correction substantially reduces the depth-integrated
@@ -182,7 +183,8 @@ grid/<resolution>/
 └── vgrid_<NK>.nc
 ```
 
-The CMEMS source fields used by the workflow are:
+The source fields obtained from the **Global Ocean Physics Analysis and
+Forecast** product are:
 
 - potential temperature (`thetao`);
 - salinity (`so`);
@@ -194,15 +196,8 @@ The CMEMS source fields used by the workflow are:
 ```text
 MOM_ICs_OBCs/
 ├── download/
-│   └── download_cmems_glorys.py
 ├── initial/
-│   ├── write_MOM6_IC.py
-│   ├── depths.py
-│   └── glorys_IC_*.yaml
 ├── boundary/
-│   ├── merge_glorys.py
-│   ├── write_MOM6_OBC.py
-│   └── boundary.py
 ├── geostrophic_adj/
 │   ├── matlab/
 │   │   ├── reconstruction_current.m
