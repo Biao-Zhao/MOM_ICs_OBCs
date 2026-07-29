@@ -133,15 +133,31 @@ the same tolerance is used.
 
 4. **Depth-integrated transport correction**
 
-   The reconstructed U/V fields are vertically integrated. A Poisson equation
-   is solved for a scalar correction potential using the target MOM6
-   `dx`, `dy`, `areaO`, depth, and wet mask. Its horizontal gradient supplies
-   a depth-independent velocity correction:
+   The reconstructed geostrophic velocity is integrated over depth to obtain
+   the barotropic transport. For the balanced initial state targeted here,
+   this transport should be nearly divergence-free, but a small residual
+   generally remains:
 
    ```math
-   u_{\mathrm{adjusted}}=u_{\mathrm{geo}}+u_c,
+   \mathbf{M}_g
+   = \int_{-H}^{0}\mathbf{u}_g\,dz,
    \qquad
-   v_{\mathrm{adjusted}}=v_{\mathrm{geo}}+v_c.
+   D = \nabla\cdot\mathbf{M}_g \ne 0.
+   ```
+
+   A scalar potential, χ, is then obtained from a Poisson equation. Its
+   gradient provides a depth-independent velocity correction that removes
+   this residual divergence:
+
+   ```math
+   \begin{aligned}
+   \nabla\cdot(H\nabla\chi) &= -D, \\
+   \mathbf{u}_{\mathrm{adjusted}}
+   &= \mathbf{u}_g+\nabla\chi, \\
+   \nabla\cdot
+   \int_{-H}^{0}\mathbf{u}_{\mathrm{adjusted}}\,dz
+   &\approx 0.
+   \end{aligned}
    ```
 
    For C9600, the barotropic correction currently takes about 20 minutes and
