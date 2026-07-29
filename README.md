@@ -4,9 +4,8 @@ This repository prepares regional [MOM6](https://github.com/NOAA-GFDL/MOM6)
 initial conditions (ICs) and open-boundary conditions (OBCs) from the
 Copernicus Marine **Global Ocean Physics Analysis and Forecast** product. It
 provides a workflow for downloading regional source fields, horizontally and
-vertically remapping them to a MOM6 grid, writing model-ready NetCDF files,
-and optionally reconstructing a dynamically balanced three-dimensional
-current field.
+vertically remapping them to a MOM6 grid, and optionally reconstructing a
+dynamically balanced three-dimensional current field.
 
 The workflow is designed for high-resolution regional applications and has
 been used with C3200 and C9600 grids.
@@ -48,8 +47,9 @@ C-grid does not guarantee dynamical consistency with the separately remapped
 SSH, temperature, salinity, target bathymetry, wet mask, and horizontal grid
 metrics. This imbalance can therefore be introduced by remapping itself and
 can exist even when the optional geostrophic adjustment is not run. During
-model spin-up, the ocean adjusts to the imbalance by emitting spurious gravity
-waves, whose influence can persist for approximately 6–10 hours.
+model spin-up, the ocean adjusts to the imbalance by emitting spurious
+barotropic gravity waves, whose influence can persist for approximately 6–10
+hours.
 
 The geostrophic-adjustment module reconstructs velocity from the remapped
 mass fields and then adds a depth-independent correction to reduce transport
@@ -171,8 +171,8 @@ the same tolerance is used.
 The animations compare sea-surface-height evolution using the directly
 interpolated and reconstructed velocity fields. The reconstructed currents
 mitigate the initialization shock, especially in regions with strong
-sea-surface-height gradients, where the spurious fast adjustment is most
-apparent.
+sea-surface-height gradients, where the spurious barotropic gravity-wave
+signal is most apparent.
 
 <table>
   <tr>
@@ -195,8 +195,7 @@ consistently on the target grid and bathymetry.
 
 The barotropic correction substantially reduces the depth-integrated
 transport divergence. This improves consistency with volume conservation and
-makes the initial current field more dynamically balanced. Both panels below
-use the same color range.
+makes the initial current field more dynamically balanced.
 
 <p align="center">
   <img src="docs/media/divergence.png" alt="Depth-integrated divergence before and after adjustment" width="100%">
