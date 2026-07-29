@@ -164,6 +164,23 @@ numerical procedure and produce nearly identical adjusted currents.
 
 ### Example results
 
+The zonal-current section shows that the reconstruction preserves the major
+vertical current structures present in the source product while placing them
+consistently on the target grid and bathymetry.
+
+<p align="center">
+  <img src="docs/media/cross_section.png" alt="Source and reconstructed zonal-current sections" width="100%">
+</p>
+
+The barotropic correction substantially reduces the depth-integrated
+transport divergence. This improves consistency with volume conservation and
+makes the initial current field more dynamically balanced.
+
+<p align="center">
+  <img src="docs/media/divergence.png" alt="Depth-integrated divergence before and after adjustment" width="100%">
+</p>
+
+
 The animations compare sea-surface-height evolution using the directly
 interpolated and reconstructed velocity fields. The reconstructed currents
 mitigate the initialization shock, especially in regions with strong
@@ -187,23 +204,6 @@ full pathway and major spatial structure of the Gulf Stream.
 <p align="center">
   <img src="docs/media/suface_current.png" alt="Surface current comparison" width="100%">
 </p>
-
-The zonal-current section shows that the reconstruction preserves the major
-vertical current structures present in the source product while placing them
-consistently on the target grid and bathymetry.
-
-<p align="center">
-  <img src="docs/media/cross_section.png" alt="Source and reconstructed zonal-current sections" width="100%">
-</p>
-
-The barotropic correction substantially reduces the depth-integrated
-transport divergence. This improves consistency with volume conservation and
-makes the initial current field more dynamically balanced.
-
-<p align="center">
-  <img src="docs/media/divergence.png" alt="Depth-integrated divergence before and after adjustment" width="100%">
-</p>
-
 ## Running the workflow
 
 ### Batch processing
