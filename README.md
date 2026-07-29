@@ -129,11 +129,8 @@ the same tolerance is used.
    Here, z′ is the vertical integration coordinate, while z is the target
    depth at which the geostrophic current is evaluated.
 
-   Wet masks are applied at every vertical level so that gradients are not
-   evaluated through land or below topography. The resulting tracer-cell
-   currents are then interpolated once to MOM6 U and V faces.
-   Three-dimensional face masks enforce zero velocity below the target
-   bathymetry.
+   The ocean mask and water depth are applied at every level so that currents
+   are calculated only in the ocean and above the seafloor.
 
 4. **Depth-integrated transport correction**
 
@@ -171,9 +168,11 @@ the same tolerance is used.
 
 ### Example results
 
-The animations below show example sea-surface-height evolution from
-experiments initialized with the directly interpolated and reconstructed
-velocity fields.
+The animations compare sea-surface-height evolution using the directly
+interpolated and reconstructed velocity fields. The reconstructed currents
+mitigate the initialization shock, especially in regions with strong
+sea-surface-height gradients, where the spurious fast adjustment is most
+apparent.
 
 <table>
   <tr>
@@ -195,7 +194,9 @@ consistently on the target grid and bathymetry.
 </p>
 
 The barotropic correction substantially reduces the depth-integrated
-transport divergence. Both panels below use the same color range.
+transport divergence. This improves consistency with volume conservation and
+makes the initial current field more dynamically balanced. Both panels below
+use the same color range.
 
 <p align="center">
   <img src="docs/media/divergence.png" alt="Depth-integrated divergence before and after adjustment" width="100%">
