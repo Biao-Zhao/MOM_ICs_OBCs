@@ -187,7 +187,7 @@ makes the initial current field more dynamically balanced.
 </p>
 
 
-The animations compare the simulated sea-surface-height evolution using the directly
+The animations compare the simulated sea-surface-height evolution initialized from the directly
 interpolated and reconstructed velocity fields. The reconstructed currents
 mitigate the initialization shock, especially in regions with strong
 sea surface height gradients, where the spurious barotropic gravity wave
