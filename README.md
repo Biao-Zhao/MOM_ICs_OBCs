@@ -52,7 +52,7 @@ hours.
 
 From a practical forecasting perspective, it is preferable to initialize the model from a dynamically balanced state. Otherwise, during the initial adjustment period, spurious gravity waves can cause the flow field to exhibit artificial oscillations. To mitigate this initialization shock, the geostrophic-adjustment module reconstructs the velocity field from the remapped mass fields and applies a depth-independent correction to reduce transport divergence on the target MOM6 grid.
 
-Two versions of the code are provided. They follow the same physical and
+Two versions of the code (MATLAB and Python) are provided. They follow the same physical and
 numerical procedure and produce nearly identical adjusted currents.
 
 ### Numerical procedure
