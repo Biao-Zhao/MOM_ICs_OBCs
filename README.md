@@ -45,15 +45,12 @@ and usually complete in about 3 minutes.
 Directly interpolating velocity from the source product onto a regional MOM6
 C-grid does not guarantee dynamical consistency with the separately remapped
 SSH, temperature, salinity, target bathymetry, wet mask, and horizontal grid
-metrics. This imbalance can therefore be introduced by remapping itself and
-can exist even when the optional geostrophic adjustment is not run. During
-model spin-up, the ocean adjusts to the imbalance by emitting spurious
+metrics. This imbalance can therefore be introduced by remapping itself. During
+model spin-up, the ocean adjusts to the imbalance by producing spurious
 barotropic gravity waves, whose influence can persist for approximately 6–10
 hours.
 
-The geostrophic-adjustment module reconstructs velocity from the remapped
-mass fields and then adds a depth-independent correction to reduce transport
-divergence on the target MOM6 grid.
+From a practical forecasting perspective, it is preferable to initialize the model from a dynamically balanced state. Otherwise, during the initial adjustment period, spurious gravity waves can cause the flow field to exhibit artificial oscillations. To mitigate this initialization shock, the geostrophic-adjustment module reconstructs the velocity field from the remapped mass fields and applies a depth-independent correction to reduce transport divergence on the target MOM6 grid.
 
 Two versions of the code are provided. They follow the same physical and
 numerical procedure and produce nearly identical adjusted currents.
