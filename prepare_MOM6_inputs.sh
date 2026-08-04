@@ -65,7 +65,8 @@ GEO_RECONSTRUCTION_SCRIPT="${BASE_DIR}/scripts/geostrophic_adj/python/reconstruc
 VGRID_FILE="${BASE_DIR}/grid/${res}/vgrid_${NK}.nc"
 HGRID_FILE="${BASE_DIR}/grid/${res}/ocean_hgrid.nc"
 
-# Optional region boundaries (comment out if you want global data)
+# Set the download region. It should be larger than the model domain.
+# Comment out this section to download global data.
 MIN_LON=-105
 MAX_LON=-35
 MIN_LAT=10
