@@ -34,7 +34,7 @@ Global Ocean Physics Analysis and Forecast
 
 Initial-condition generation uses reusable horizontal-interpolation weights.
 The first run is slower because the weight files must be generated and written.
-For a C9600 grid (`6145 × 3169`), this normally takes about 15–20 minutes (depends on the available memory on the node you are running this script).
+For a C9600 grid (`6145 × 3169`), this normally takes about 15–20 minutes, depending on the memory available on the compute node running the script.
 Later runs on the same source and target grids can read the existing weights
 and usually complete in about 3 minutes.
 
