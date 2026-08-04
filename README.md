@@ -50,7 +50,7 @@ model spin-up, the ocean adjusts to the imbalance by producing spurious
 barotropic gravity waves, whose influence can persist for approximately 6–10
 hours.
 
-From a practical forecasting perspective, it is preferable to initialize the model from a dynamically balanced state. Otherwise, during the initial adjustment period, spurious gravity waves can cause the flow field to exhibit artificial oscillations. To mitigate this initialization shock, the geostrophic-adjustment module reconstructs the velocity field from the remapped mass fields and applies a depth-independent correction to reduce transport divergence on the target MOM6 grid.
+From a practical forecasting perspective, when the ocean model is initialized from an external dataset, it is preferable to initialize the model from a dynamically balanced state to reduce the initialization shock. Otherwise, during the initial adjustment period, spurious gravity waves can cause the flow field to exhibit artificial oscillations. To mitigate this initialization shock, the geostrophic-adjustment module reconstructs the velocity field from the remapped mass fields and applies a depth-independent correction to reduce transport divergence on the target MOM6 grid.
 
 Two versions of the code (MATLAB and Python) are provided. They follow the same physical and
 numerical procedure and produce nearly identical adjusted currents.
