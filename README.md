@@ -273,13 +273,8 @@ MOM_ICs_OBCs/
 ├── initial/
 ├── boundary/
 ├── geostrophic_adj/
-│   ├── matlab/
-│   │   ├── reconstruction_current.m
-│   │   ├── make_geostrophic_current.m
-│   │   ├── build_poisson_T.m
-│   │   └── rho_eos.m
-│   └── python/
-│       └── reconstruction_current.py
+│                  ├── matlab/
+│                  └── python/
 ├── prepare_MOM6_inputs.sh
 └── Generating_MOM6_IC_OBCs.csh
 ```
@@ -299,5 +294,5 @@ OBCs/C3200/NK85/2022112812/uv_001.nc
 
 Workflow development and geostrophic-adjustment integration: **Biao Zhao**.
 
-The IC and OBC preparation workflow incorporates the Python processing scripts
+The IC and OBC preparation workflow adaptes the Python processing scripts
 developed by **Dr. Jing Chen**.
