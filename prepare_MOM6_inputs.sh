@@ -57,6 +57,7 @@ REGRID_WEIGHT_DIR="${BASE_DIR}/regrid_weights/${res}"
 # Paths of downloading, making initial $ open boundary condition scripts
 DOWNLOAD_SCRIPT="${BASE_DIR}/scripts/download/download_cmems_glorys.py"
 INITIAL_SCRIPT="${BASE_DIR}/scripts/initial/write_MOM6_IC.py"
+SIS2_INITIAL_SCRIPT="${BASE_DIR}/scripts/initial/write_SIS2_IC.py"
 BOUNDARY_MERGE_SCRIPT="${BASE_DIR}/scripts/boundary/merge_glorys.py"
 BOUNDARY_MAKE_SCRIPT="${BASE_DIR}/scripts/boundary/write_MOM6_OBC.py"
 GEO_RECONSTRUCTION_SCRIPT="${BASE_DIR}/scripts/geostrophic_adj/python/reconstruction_current.py"
@@ -196,6 +197,19 @@ EOF
  ${EXE} ${INITIAL_SCRIPT} --config_file  ${YAML}
 
 done
+
+# SIS2 reads a two-dimensional concentration/mass file for a new run. The
+# daily-mean sea-ice source does not depend on START_HOUR, so create it once.
+SEAICE_PATH="${GLORYS_DIR}/${DATE_COMPACT}/glo12_rg_1d-m_${DATE_COMPACT}-${DATE_COMPACT}_2D-ice.nc"
+SIS2_IC_FILE="${IC_OUTPUT_DIR}/SIS2_IC_${DATE_COMPACT}_${res}.nc"
+
+${EXE} "${SIS2_INITIAL_SCRIPT}" \
+  --input "${SEAICE_PATH}" \
+  --grid "${HGRID_FILE}" \
+  --output "${SIS2_IC_FILE}" \
+  --weight-dir "${REGRID_WEIGHT_DIR}" \
+  --resolution "${res}" \
+  --reuse-weights
 
 echo "[INFO] Step 2 finished successfully."
 
