@@ -27,7 +27,6 @@ set -e
 # set 3: only make bounday conditions.         set 4: only reconstruct geostrophic currents.
 # set "all": run all steps
 MODE="3"
-echo "[INFO] Running mode: $MODE"
 
 # Start and end date
 START_DATE="2022-11-26"
