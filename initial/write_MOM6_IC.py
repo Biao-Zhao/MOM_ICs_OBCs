@@ -73,10 +73,23 @@ def write_initial(config):
     os.makedirs(weight_dir, exist_ok=True)
     reuse_weights = config.get("reuse_weights", False)
 
-    lon_min = float(config["min_lon"])
-    lon_max = float(config["max_lon"])
-    lat_min = float(config["min_lat"])
-    lat_max = float(config["max_lat"])
+    region_keys = ("min_lon", "max_lon", "min_lat", "max_lat")
+    region_values = [config.get(key) for key in region_keys]
+    if any(value is not None for value in region_values) and not all(
+        value is not None for value in region_values
+    ):
+        raise ValueError(
+            "Set all of min_lon, max_lon, min_lat, and max_lat, "
+            "or leave all four unset for global input."
+        )
+
+    region_selection = {}
+    if all(value is not None for value in region_values):
+        lon_min, lon_max, lat_min, lat_max = map(float, region_values)
+        region_selection = {
+            "longitude": slice(lon_min, lon_max),
+            "latitude": slice(lat_min, lat_max),
+        }
 
     variable_names = config["variable_names"]
     temp_var = variable_names["temperature"]
@@ -92,36 +105,30 @@ def write_initial(config):
     print(f"  U (zonal):   {u_file}")
     print(f"  V (merid.):  {v_file}")
     print(f"  SSH at hour: {hour}")
-    print(
-        f"  Region: lon=[{lon_min}, {lon_max}], "
-        f"lat=[{lat_min}, {lat_max}]"
-    )
+    if region_selection:
+        print(
+            f"  Region: lon=[{lon_min}, {lon_max}], "
+            f"lat=[{lat_min}, {lat_max}]"
+        )
+    else:
+        print("  Region: global (using the complete input grid)")
 
     ds_temp = (
         xarray.open_dataset(temp_file)[temp_var]
-        .sel(
-            longitude=slice(lon_min, lon_max),
-            latitude=slice(lat_min, lat_max),
-        )
+        .sel(region_selection)
         .rename({"longitude": "lon", "latitude": "lat"})
     )
 
     ds_sal = (
         xarray.open_dataset(sal_file)[sal_var]
-        .sel(
-            longitude=slice(lon_min, lon_max),
-            latitude=slice(lat_min, lat_max),
-        )
+        .sel(region_selection)
         .rename({"longitude": "lon", "latitude": "lat"})
         .assign_coords(lat=ds_temp.lat, lon=ds_temp.lon)
     )
 
     ds_ssh = (
         xarray.open_dataset(ssh_file)[ssh_var]
-        .sel(
-            longitude=slice(lon_min, lon_max),
-            latitude=slice(lat_min, lat_max),
-        )
+        .sel(region_selection)
         .isel(time=hour)
         .isel(depth=0, drop=True)
         .rename({"longitude": "lon", "latitude": "lat"})
@@ -130,20 +137,14 @@ def write_initial(config):
 
     ds_u = (
         xarray.open_dataset(u_file)[u_var]
-        .sel(
-            longitude=slice(lon_min, lon_max),
-            latitude=slice(lat_min, lat_max),
-        )
+        .sel(region_selection)
         .rename({"longitude": "lon", "latitude": "lat"})
         .assign_coords(lat=ds_temp.lat, lon=ds_temp.lon)
     )
 
     ds_v = (
         xarray.open_dataset(v_file)[v_var]
-        .sel(
-            longitude=slice(lon_min, lon_max),
-            latitude=slice(lat_min, lat_max),
-        )
+        .sel(region_selection)
         .rename({"longitude": "lon", "latitude": "lat"})
         .assign_coords(lat=ds_temp.lat, lon=ds_temp.lon)
     )
@@ -394,10 +395,6 @@ def main():
         "grid_file",
         "output_file",
         "resolution",
-        "min_lon",
-        "max_lon",
-        "min_lat",
-        "max_lat",
         "variable_names",
     ]
     missing = [key for key in required if key not in config]

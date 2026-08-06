@@ -202,6 +202,15 @@ done
 # daily-mean sea-ice source does not depend on START_HOUR, so create it once.
 SEAICE_PATH="${GLORYS_DIR}/${DATE_COMPACT}/glo12_rg_1d-m_${DATE_COMPACT}-${DATE_COMPACT}_2D-ice.nc"
 SIS2_IC_FILE="${IC_OUTPUT_DIR}/SIS2_IC_${DATE_COMPACT}_${res}.nc"
+SIS2_REGION_ARGS=()
+
+if [[ -n "${MIN_LON:-}" && -n "${MAX_LON:-}" && -n "${MIN_LAT:-}" && -n "${MAX_LAT:-}" ]]; then
+  SIS2_REGION_ARGS+=(--min-lon "${MIN_LON}" --max-lon "${MAX_LON}")
+  SIS2_REGION_ARGS+=(--min-lat "${MIN_LAT}" --max-lat "${MAX_LAT}")
+elif [[ -n "${MIN_LON:-}" || -n "${MAX_LON:-}" || -n "${MIN_LAT:-}" || -n "${MAX_LAT:-}" ]]; then
+  echo "ERROR: Set all four regional bounds or leave all four unset for global input." >&2
+  exit 1
+fi
 
 ${EXE} "${SIS2_INITIAL_SCRIPT}" \
   --input "${SEAICE_PATH}" \
@@ -209,6 +218,7 @@ ${EXE} "${SIS2_INITIAL_SCRIPT}" \
   --output "${SIS2_IC_FILE}" \
   --weight-dir "${REGRID_WEIGHT_DIR}" \
   --resolution "${res}" \
+  "${SIS2_REGION_ARGS[@]}" \
   --reuse-weights
 
 echo "[INFO] Step 2 finished successfully."

@@ -125,6 +125,26 @@ def write_sis2_initial(args):
         raise FileNotFoundError(f"MOM6 hgrid file not found: {grid_path}")
     weight_dir.mkdir(parents=True, exist_ok=True)
 
+    region_values = (args.min_lon, args.max_lon, args.min_lat, args.max_lat)
+    regional = all(value is not None for value in region_values)
+    if regional:
+        region_selection = {
+            "longitude": slice(args.min_lon, args.max_lon),
+            "latitude": slice(args.min_lat, args.max_lat),
+        }
+        region_label = (
+            f"lon{args.min_lon:g}_{args.max_lon:g}_"
+            f"lat{args.min_lat:g}_{args.max_lat:g}"
+        ).replace("-", "m").replace(".", "p")
+        print(
+            f"Source region: lon=[{args.min_lon}, {args.max_lon}], "
+            f"lat=[{args.min_lat}, {args.max_lat}]"
+        )
+    else:
+        region_selection = {}
+        region_label = "global"
+        print("Source region: global (using the complete input grid)")
+
     with xr.open_dataset(input_path) as source_ds, xr.open_dataset(grid_path) as hgrid:
         required = {"siconc", "sithick"}
         missing = required.difference(source_ds.variables)
@@ -133,8 +153,15 @@ def write_sis2_initial(args):
         if source_ds.sizes.get("time", 1) != 1:
             raise ValueError("Expected exactly one daily-mean sea-ice time record")
 
-        concentration = source_ds["siconc"]
-        thickness = source_ds["sithick"]
+        selected_source = source_ds.sel(region_selection)
+        if (
+            selected_source.sizes.get("longitude", 0) < 2
+            or selected_source.sizes.get("latitude", 0) < 2
+        ):
+            raise ValueError("The selected sea-ice source region is empty or too small")
+
+        concentration = selected_source["siconc"]
+        thickness = selected_source["sithick"]
         if "time" in concentration.dims:
             concentration = concentration.isel(time=0, drop=True)
             thickness = thickness.isel(time=0, drop=True)
@@ -143,11 +170,16 @@ def write_sis2_initial(args):
         thickness = thickness.fillna(0.0).clip(min=0.0)
         ice_volume = concentration * thickness
 
-        src_grid = source_grid(source_ds)
+        src_grid = source_grid(selected_source)
         dst_grid = target_tracer_grid(hgrid)
-        weight_file = weight_dir / (
-            f"regrid_glorys_{args.resolution}_ice_conservative.nc"
-        )
+        if regional:
+            weight_name = (
+                f"regrid_glorys_{args.resolution}_ice_conservative_"
+                f"{region_label}.nc"
+            )
+        else:
+            weight_name = f"regrid_glorys_{args.resolution}_ice_conservative.nc"
+        weight_file = weight_dir / weight_name
         regridder = make_regridder(
             src_grid,
             dst_grid,
@@ -225,6 +257,10 @@ def parse_args():
     parser.add_argument("--output", required=True, help="Output SIS2 initial NetCDF")
     parser.add_argument("--weight-dir", required=True, help="Regridding-weight directory")
     parser.add_argument("--resolution", required=True, help="Grid label used in weight filenames")
+    parser.add_argument("--min-lon", type=float, help="Minimum source longitude")
+    parser.add_argument("--max-lon", type=float, help="Maximum source longitude")
+    parser.add_argument("--min-lat", type=float, help="Minimum source latitude")
+    parser.add_argument("--max-lat", type=float, help="Maximum source latitude")
     parser.add_argument(
         "--ice-density",
         type=float,
@@ -247,6 +283,19 @@ def parse_args():
         parser.error("--ice-density must be positive")
     if not 0.0 <= args.minimum_concentration < 1.0:
         parser.error("--minimum-concentration must be in [0, 1)")
+    region_values = (args.min_lon, args.max_lon, args.min_lat, args.max_lat)
+    if any(value is not None for value in region_values) and not all(
+        value is not None for value in region_values
+    ):
+        parser.error(
+            "set all of --min-lon, --max-lon, --min-lat, and --max-lat, "
+            "or omit all four for global input"
+        )
+    if all(value is not None for value in region_values):
+        if args.min_lon >= args.max_lon:
+            parser.error("--min-lon must be smaller than --max-lon")
+        if args.min_lat >= args.max_lat:
+            parser.error("--min-lat must be smaller than --max-lat")
     return args
 
 
