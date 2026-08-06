@@ -106,12 +106,19 @@ while [[ "$CURRENT_DATE" != "$END_NEXT" ]]; do
   for HOUR in "${TIME_SLOTS[@]}"; do
     echo "[INFO] Downloading data for ${CURRENT_DATE} ${HOUR} UTC..."
 
+    DOWNLOAD_EXTRA_ARGS=()
+    # Sea ice is a daily mean, so download it once with the first time slot
+    # on the initialization date. Its source time does not use START_HOUR.
+    if [[ "$CURRENT_DATE" == "$START_DATE" && "$HOUR" == "${TIME_SLOTS[0]}" ]]; then
+      DOWNLOAD_EXTRA_ARGS+=(--download-sea-ice)
+    fi
+
     if [[ -n "${MIN_LON:-}" && -n "${MAX_LON:-}" && -n "${MIN_LAT:-}" && -n "${MAX_LAT:-}" ]]; then
       echo "Regional download"
-      ${EXE} "$DOWNLOAD_SCRIPT"  --outdir "$GLORYS_DIR" --date "$CURRENT_DATE" --hour "$HOUR" --min-lon "$MIN_LON" --max-lon "$MAX_LON" --min-lat "$MIN_LAT" --max-lat "$MAX_LAT"
+      ${EXE} "$DOWNLOAD_SCRIPT" --outdir "$GLORYS_DIR" --date "$CURRENT_DATE" --hour "$HOUR" "${DOWNLOAD_EXTRA_ARGS[@]}" --min-lon "$MIN_LON" --max-lon "$MAX_LON" --min-lat "$MIN_LAT" --max-lat "$MAX_LAT"
     else
       echo "Global download"
-      ${EXE} "$DOWNLOAD_SCRIPT" --outdir "$GLORYS_DIR" --date "$CURRENT_DATE" --hour "$HOUR"
+      ${EXE} "$DOWNLOAD_SCRIPT" --outdir "$GLORYS_DIR" --date "$CURRENT_DATE" --hour "$HOUR" "${DOWNLOAD_EXTRA_ARGS[@]}"
     fi
   done
 

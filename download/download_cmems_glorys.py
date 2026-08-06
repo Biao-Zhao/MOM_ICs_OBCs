@@ -17,6 +17,7 @@ Optional:
 Behavior:
   - Downloads 3D fields (thetao, so, uo, vo) at given 6-hour timestamp
   - Downloads full-day hourly sea level only at 00 UTC
+  - Optionally downloads daily-mean sea-ice fields for the requested date
   - Output: <outdir>/YYYYMMDD/
 """
 
@@ -32,6 +33,16 @@ DATASET_THETAO = "cmems_mod_glo_phy-thetao_anfc_0.083deg_PT6H-i"
 DATASET_SO     = "cmems_mod_glo_phy-so_anfc_0.083deg_PT6H-i"
 DATASET_CUR    = "cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i"
 DATASET_ZOS    = "cmems_mod_glo_phy_anfc_merged-sl_PT1H-i"
+DATASET_SEAICE = "cmems_mod_glo_phy_anfc_0.083deg_P1D-m"
+
+SEAICE_VARIABLES = [
+    "siconc",
+    "sithick",
+    "sisnthick",
+    "ist",
+    "usi",
+    "vsi",
+]
 
 # Depth range
 DEPTH_MIN, DEPTH_MAX = 0, 7000
@@ -42,6 +53,11 @@ def parse_args():
     p.add_argument("--outdir", required=True, help="Base output directory")
     p.add_argument("--date", required=True, help="Date (YYYY-MM-DD)")
     p.add_argument("--hour", required=True, help="Hour (00, 06, 12, 18)")
+    p.add_argument(
+        "--download-sea-ice",
+        action="store_true",
+        help="Download daily-mean sea-ice fields for --date",
+    )
     p.add_argument("--min-lon", type=float)
     p.add_argument("--max-lon", type=float)
     p.add_argument("--min-lat", type=float)
@@ -72,12 +88,49 @@ def parse_args():
         outdir=args.outdir,
         date=args.date,
         hour=args.hour,
+        download_sea_ice=args.download_sea_ice,
         region_kwargs=region_kwargs,
     )
 
 
 def yyyymmdd(date_str):
     return date_str.replace("-", "")
+
+
+def ensure_download(path, label):
+    """Fail immediately if Copernicus Marine did not create the requested file."""
+    if not os.path.isfile(path) or os.path.getsize(path) == 0:
+        raise RuntimeError(
+            f"{label} download failed: output file was not created: {path}"
+        )
+
+
+def download_daily_sea_ice(args, out_dir, date_compact):
+    """Download the daily-mean sea-ice sample labeled with the requested date."""
+    # Although this is a daily-mean product, its published time coordinates
+    # are labeled at 00 UTC. A 12 UTC query selects the following day's sample.
+    ice_timestamp = f"{args.date}T00:00:00"
+    f_seaice = os.path.join(
+        out_dir,
+        f"glo12_rg_1d-m_{date_compact}-{date_compact}_2D-ice.nc",
+    )
+    if os.path.exists(f_seaice):
+        os.remove(f_seaice)
+    print(
+        f"[INFO] Downloading daily-mean sea-ice fields for "
+        f"{args.date} ..."
+    )
+    cm.subset(
+        dataset_id=DATASET_SEAICE,
+        variables=SEAICE_VARIABLES,
+        start_datetime=ice_timestamp,
+        end_datetime=ice_timestamp,
+        output_filename=f_seaice,
+        overwrite=True,
+        **args.region_kwargs,
+    )
+    ensure_download(f_seaice, "Sea-ice")
+    return f_seaice
 
 
 def main():
@@ -102,9 +155,10 @@ def main():
         minimum_depth=DEPTH_MIN,
         maximum_depth=DEPTH_MAX,
         output_filename=f_thetao,
-        force_download=True,
+        overwrite=True,
         **args.region_kwargs,
     )
+    ensure_download(f_thetao, "Temperature")
 
     # --- Salinity ---
     f_so = os.path.join(out_dir, f"glo12_rg_6h-i_{date_compact}-{args.hour}h_3D-so_hcst.nc")
@@ -118,9 +172,10 @@ def main():
         minimum_depth=DEPTH_MIN,
         maximum_depth=DEPTH_MAX,
         output_filename=f_so,
-        force_download=True,
+        overwrite=True,
         **args.region_kwargs,
     )
+    ensure_download(f_so, "Salinity")
 
     # --- Currents ---
     f_cur = os.path.join(out_dir, f"glo12_rg_6h-i_{date_compact}-{args.hour}h_3D-uovo_hcst.nc")
@@ -134,9 +189,10 @@ def main():
         minimum_depth=DEPTH_MIN,
         maximum_depth=DEPTH_MAX,
         output_filename=f_cur,
-        force_download=True,
+        overwrite=True,
         **args.region_kwargs,
     )
+    ensure_download(f_cur, "Current")
 
     # --- Sea level (only once per day) ---
     if args.hour == "00":
@@ -150,14 +206,19 @@ def main():
             start_datetime=day_start,
             end_datetime=day_end,
             output_filename=f_zos,
-            force_download=True,
+            overwrite=True,
             **args.region_kwargs,
         )
+        ensure_download(f_zos, "Sea-level")
     else:
         print(f"[INFO] Skipping sea level for {args.date} (already handled at 00 UTC).")
 
+    # --- Daily-mean sea ice (only when explicitly requested) ---
+    if args.download_sea_ice:
+        download_daily_sea_ice(args, out_dir, date_compact)
+
     # --- Summary ---
-    print(f"\n✅ Completed: {args.date} {args.hour} UTC")
+    print(f"\nCompleted: {args.date} {args.hour} UTC")
     print(f"   Output: {out_dir}")
     if args.region_kwargs:
         print(f"   Region: lon[{args.region_kwargs['minimum_longitude']}, {args.region_kwargs['maximum_longitude']}], "
