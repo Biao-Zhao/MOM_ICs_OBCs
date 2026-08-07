@@ -353,9 +353,7 @@ def write_initial(config):
         print(f"Filling deep NaNs for {label}...")
         original_dims = field.dims
         field = field.ffill("zl").transpose(*original_dims)
-        phase = perf_counter()
         field.load()
-        report_time(f"{label}: compute", phase)
         return field
 
     # zl is shallow-to-deep, so ffill extends the deepest valid value
