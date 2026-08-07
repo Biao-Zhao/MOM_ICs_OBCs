@@ -91,12 +91,8 @@ def write_initial(config):
             "longitude": slice(lon_min, lon_max),
             "latitude": slice(lat_min, lat_max),
         }
-        region_label = (
-            f"lon{lon_min:g}_{lon_max:g}_lat{lat_min:g}_{lat_max:g}"
-        ).replace("-", "m").replace(".", "p")
         periodic_source = False
     else:
-        region_label = "periodic_latmask"
         periodic_source = True
 
     variable_names = config["variable_names"]
@@ -205,15 +201,6 @@ def write_initial(config):
         {"nxp": "xh", "nyp": "yq"}
     )
 
-    if periodic_source:
-        source_lat_min = float(glorys["lat"].min())
-        source_lat_max = float(glorys["lat"].max())
-        for target in (target_t, target_u, target_v):
-            target["mask"] = (
-                (target["lat"] >= source_lat_min)
-                & (target["lat"] <= source_lat_max)
-            ).astype(np.int32)
-
     print("Tracer target dimensions:", target_t.dims)
     print("U target dimensions:", target_u.dims)
     print("V target dimensions:", target_v.dims)
@@ -224,7 +211,7 @@ def write_initial(config):
         target_t,
         os.path.join(
         weight_dir,
-        f"regrid_glorys_{resolution}_tracers_{region_label}.nc",
+        f"regrid_glorys_{resolution}_tracers.nc",
         ),
         reuse_weights,
         periodic_source,
@@ -234,7 +221,7 @@ def write_initial(config):
         target_u,
         os.path.join(
         weight_dir,
-        f"regrid_glorys_{resolution}_u_{region_label}.nc",
+        f"regrid_glorys_{resolution}_u.nc",
         ),
         reuse_weights,
         periodic_source,
@@ -244,7 +231,7 @@ def write_initial(config):
         target_v,
         os.path.join(
         weight_dir,
-        f"regrid_glorys_{resolution}_v_{region_label}.nc",
+        f"regrid_glorys_{resolution}_v.nc",
         ),
         reuse_weights,
         periodic_source,
