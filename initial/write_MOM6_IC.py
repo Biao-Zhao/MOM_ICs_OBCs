@@ -329,13 +329,16 @@ def write_initial(config):
         """Vertically interpolate and flood one source field."""
         phase = perf_counter()
         source = source.assign_coords(time=output_time)
-        # Preserve the original filling order: extend the shallowest source
-        # value upward, then let Kara handle horizontal gaps independently at
-        # each target depth.  Deep values are not extended downward on the
-        # source grid before horizontal flooding.
+        # Extend the shallowest source value to MOM6 layers above the first
+        # GLORYS level, and extend each water column's deepest valid value
+        # downward before horizontal flooding.  Without the downward fill,
+        # abyssal levels contain only a few trench points on a global grid;
+        # HCTFlood then tries to propagate those values across all 4320
+        # longitudes and can exceed its hard-coded 1000-iteration limit.
         reverted = (
             source.interp(depth=ztarget)
             .bfill("zl")
+            .ffill("zl")
         )
         flooded_source = flood_kara_parallel_levels(
             reverted,
