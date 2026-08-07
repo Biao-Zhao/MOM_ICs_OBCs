@@ -47,6 +47,9 @@ res="C9600"
 #vertical levels
 NK="85"
 
+# Number of processes used to run Kara flooding across vertical levels
+KARA_WORKERS=4
+
 # Output directory for GLORYS and IC & OBC data
 BASE_DIR="/ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs"
 GLORYS_DIR="${BASE_DIR}/CMEMS"
@@ -184,6 +187,7 @@ output_file: ${IC_File}
 # Whether to reuse existing regridding weights (if applicable)
 weight_dir: ${REGRID_WEIGHT_DIR}
 reuse_weights: True
+kara_workers: ${KARA_WORKERS}
 
 # Variable names inside the NetCDF files
 variable_names:

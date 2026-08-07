@@ -15,7 +15,9 @@ directly to the MOM6 tracer grid.
 
 import argparse
 import gc
+import multiprocessing
 import os
+from concurrent.futures import ProcessPoolExecutor
 from time import perf_counter
 
 import numpy as np
@@ -26,6 +28,85 @@ import yaml
 from HCtFlood import kara as flood
 
 from depths import vgrid_to_layers
+
+
+_KARA_SOURCE_PLANES = None
+
+
+def _flood_kara_plane(index):
+    """Flood one 2-D plane with the unchanged HCTFlood Kara kernel."""
+    plane = _KARA_SOURCE_PLANES[index]
+    return index, flood.flood_kara_ma(np.ma.masked_invalid(plane))
+
+
+def flood_kara_parallel_levels(
+    data,
+    workers,
+    xdim="lon",
+    ydim="lat",
+    zdim="z",
+    tdim="time",
+):
+    """Run the unchanged Kara algorithm concurrently across vertical levels."""
+    if workers <= 1:
+        return flood.flood_kara(
+            data,
+            xdim=xdim,
+            ydim=ydim,
+            zdim=zdim,
+            tdim=tdim,
+        )
+
+    if "fork" not in multiprocessing.get_all_start_methods():
+        raise RuntimeError(
+            "Parallel Kara flooding requires the multiprocessing 'fork' "
+            "start method available on Linux."
+        )
+
+    if tdim not in data.dims:
+        data = data.expand_dims(dim=tdim)
+    if zdim not in data.dims:
+        data = data.expand_dims(dim=zdim)
+
+    ordered = data.transpose(tdim, zdim, ydim, xdim)
+    values = np.asarray(ordered.data)
+    nrec, nlev, ny, nx = values.shape
+    planes = values.reshape((-1, ny, nx))
+    output = np.empty_like(planes)
+
+    # Compile the Numba kernel before forking so every worker inherits it.
+    warmup = np.ma.masked_invalid(
+        np.array([[1.0, 1.0], [1.0, np.nan]], dtype=values.dtype)
+    )
+    flood.flood_kara_ma(warmup)
+
+    global _KARA_SOURCE_PLANES
+    _KARA_SOURCE_PLANES = planes
+    context = multiprocessing.get_context("fork")
+    with ProcessPoolExecutor(
+        max_workers=workers,
+        mp_context=context,
+    ) as executor:
+        for index, flooded_plane in executor.map(
+            _flood_kara_plane,
+            range(len(planes)),
+            chunksize=1,
+        ):
+            output[index] = flooded_plane
+    _KARA_SOURCE_PLANES = None
+
+    output = output.reshape((nrec, nlev, ny, nx))
+    return xarray.DataArray(
+        output,
+        name=str(data.name),
+        coords={
+            tdim: data[tdim],
+            zdim: data[zdim],
+            ydim: data[ydim],
+            xdim: data[xdim],
+        },
+        dims=(tdim, zdim, ydim, xdim),
+    )
 
 
 def report_time(label, start_time):
@@ -73,6 +154,9 @@ def write_initial(config):
     weight_dir = config.get("weight_dir", ".")
     os.makedirs(weight_dir, exist_ok=True)
     reuse_weights = config.get("reuse_weights", False)
+    kara_workers = int(config.get("kara_workers", 1))
+    if kara_workers < 1:
+        raise ValueError("kara_workers must be at least 1.")
 
     region_keys = ("min_lon", "max_lon", "min_lat", "max_lat")
     region_values = [config.get(key) for key in region_keys]
@@ -164,6 +248,7 @@ def write_initial(config):
 
     glorys = xarray.merge([ds_temp, ds_sal, ds_ssh, ds_u, ds_v])
     print("GLORYS dimensions:", glorys.dims)
+    print(f"Kara vertical-level workers: {kara_workers}")
 
     # Keep the time treatment used by the original script.
     glorys["time"] = (("time",), ds_temp["time"].dt.floor("1d").data)
@@ -255,8 +340,12 @@ def write_initial(config):
             .bfill("zl")
             .ffill("zl")
         )
-        flooded_source = flood.flood_kara(reverted, zdim="zl")
-        report_time(f"{label}: vertical interpolation + flood", phase)
+        flooded_source = flood_kara_parallel_levels(
+            reverted,
+            workers=kara_workers,
+            zdim="zl",
+        )
+        report_time(f"{label}: vertical interpolation + Kara fill", phase)
         return flooded_source
 
     def finish_3d_target(field, label):
