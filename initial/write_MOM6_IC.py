@@ -14,6 +14,7 @@ directly to the MOM6 tracer grid.
 """
 
 import argparse
+import gc
 import os
 from time import perf_counter
 
@@ -34,7 +35,7 @@ def report_time(label, start_time):
     return perf_counter()
 
 
-def make_regridder(source, target, filename, reuse_weights):
+def make_regridder(source, target, filename, reuse_weights, periodic):
     """
     Reuse a compatible weight file when requested and present.
 
@@ -51,7 +52,7 @@ def make_regridder(source, target, filename, reuse_weights):
         method="bilinear",
         filename=filename,
         reuse_weights=reuse_this_file,
-        periodic=False,
+        periodic=periodic,
     )
 
 
@@ -90,6 +91,13 @@ def write_initial(config):
             "longitude": slice(lon_min, lon_max),
             "latitude": slice(lat_min, lat_max),
         }
+        region_label = (
+            f"lon{lon_min:g}_{lon_max:g}_lat{lat_min:g}_{lat_max:g}"
+        ).replace("-", "m").replace(".", "p")
+        periodic_source = False
+    else:
+        region_label = "periodic_latmask"
+        periodic_source = True
 
     variable_names = config["variable_names"]
     temp_var = variable_names["temperature"]
@@ -164,26 +172,6 @@ def write_initial(config):
     # Keep the time treatment used by the original script.
     glorys["time"] = (("time",), ds_temp["time"].dt.floor("1d").data)
 
-    # Interpolate vertically on the smaller GLORYS source grid.
-    phase_start = perf_counter()
-    revert = glorys.interp(depth=ztarget).bfill("zl")
-
-    # Flood the four 3-D source fields over land.
-    flooded = xarray.merge(
-        flood.flood_kara(revert[var], zdim="zl")
-        for var in [temp_var, sal_var, u_var, v_var]
-    )
-
-    # Flood SSH once, then select the surface added by flood_kara.
-    flooded_ssh = flood.flood_kara(revert[ssh_var])
-    surface_ssh = flooded_ssh.isel(z=0).drop_vars("z")
-    surface_ssh["time"] = flooded.time
-    flooded = xarray.merge(
-        [flooded, surface_ssh.to_dataset(name=ssh_var)],
-        compat="override",
-    )
-    report_time("vertical interpolation + flood", phase_start)
-
     target_grid = xarray.open_dataset(grid_file)
 
     # Tracer points: odd/odd locations on the MOM6 supergrid.
@@ -217,6 +205,15 @@ def write_initial(config):
         {"nxp": "xh", "nyp": "yq"}
     )
 
+    if periodic_source:
+        source_lat_min = float(glorys["lat"].min())
+        source_lat_max = float(glorys["lat"].max())
+        for target in (target_t, target_u, target_v):
+            target["mask"] = (
+                (target["lat"] >= source_lat_min)
+                & (target["lat"] <= source_lat_max)
+            ).astype(np.int32)
+
     print("Tracer target dimensions:", target_t.dims)
     print("U target dimensions:", target_u.dims)
     print("V target dimensions:", target_v.dims)
@@ -227,87 +224,139 @@ def write_initial(config):
         target_t,
         os.path.join(
         weight_dir,
-        f"regrid_glorys_{resolution}_tracers.nc",
+        f"regrid_glorys_{resolution}_tracers_{region_label}.nc",
         ),
         reuse_weights,
+        periodic_source,
     )
     glorys_to_u = make_regridder(
         glorys,
         target_u,
         os.path.join(
         weight_dir,
-        f"regrid_glorys_{resolution}_u.nc",
+        f"regrid_glorys_{resolution}_u_{region_label}.nc",
         ),
         reuse_weights,
+        periodic_source,
     )
     glorys_to_v = make_regridder(
         glorys,
         target_v,
         os.path.join(
         weight_dir,
-        f"regrid_glorys_{resolution}_v.nc",
+        f"regrid_glorys_{resolution}_v_{region_label}.nc",
         ),
         reuse_weights,
+        periodic_source,
     )
     report_time("create/reuse regridders", phase_start)
 
-    # Tracers already go directly to their final T locations.
-    phase_start = perf_counter()
-    interped_t = glorys_to_t(
-        flooded[[temp_var, sal_var, ssh_var]]
-    ).astype(np.float32)
-    report_time("tracer regrid", phase_start)
+    output_time = ds_temp["time"].dt.floor("1d").data
 
-    # Both earth-relative components are needed at U points because rotation
-    # mixes u and v. Only the resulting model-relative u is retained.
-    phase_start = perf_counter()
-    earth_at_u = glorys_to_u(flooded[[u_var, v_var]])
-    uo = (
-        np.cos(angle_u) * earth_at_u[u_var]
-        + np.sin(angle_u) * earth_at_u[v_var]
-    ).astype(np.float32)
-    uo.name = u_var
-    report_time("U regrid + rotation", phase_start)
+    def flood_3d_source(source, label):
+        """Vertically interpolate and flood one source field."""
+        phase = perf_counter()
+        source = source.assign_coords(time=output_time)
+        # Extend the shallowest source value to MOM6 layers above the first
+        # GLORYS level, and extend each water column's deepest valid value
+        # downward before horizontal flooding.  Without the downward fill,
+        # abyssal levels contain only a few trench points on a global grid;
+        # HCTFlood then tries to propagate those values across all 4320
+        # longitudes and can exceed its hard-coded 1000-iteration limit.
+        reverted = (
+            source.interp(depth=ztarget)
+            .bfill("zl")
+            .ffill("zl")
+        )
+        flooded_source = flood.flood_kara(reverted, zdim="zl")
+        report_time(f"{label}: vertical interpolation + flood", phase)
+        return flooded_source
 
-    # Both earth-relative components are also needed at V points. Only the
-    # resulting model-relative v is retained.
-    phase_start = perf_counter()
-    earth_at_v = glorys_to_v(flooded[[u_var, v_var]])
-    vo = (
-        -np.sin(angle_v) * earth_at_v[u_var]
-        + np.cos(angle_v) * earth_at_v[v_var]
-    ).astype(np.float32)
-    vo.name = v_var
-    report_time("V regrid + rotation", phase_start)
-
-    interped = xarray.merge((interped_t, uo, vo)).transpose(
-        "time", "zl", "yh", "yq", "xh", "xq"
-    )
-
-    interped = interped.rename(
-        {
-            temp_var: "temp",
-            sal_var: "salt",
-            ssh_var: "ssh",
-            u_var: "u",
-            v_var: "v",
-        }
-    )
+    def finish_3d_target(field, label):
+        """Fill deep target NaNs and materialize one final field."""
+        print(f"Filling deep NaNs for {label}...")
+        original_dims = field.dims
+        field = field.ffill("zl").transpose(*original_dims)
+        phase = perf_counter()
+        field.load()
+        report_time(f"{label}: compute", phase)
+        return field
 
     # zl is shallow-to-deep, so ffill extends the deepest valid value
     # downward without one Python call per water column.
-    zl_values = interped["zl"].values
+    zl_values = ztarget["zl"].values
     if len(zl_values) > 1 and not np.all(np.diff(zl_values) > 0):
         raise ValueError(
             "Expected zl to increase monotonically from shallow to deep."
         )
 
+    # Process and materialize each tracer independently so the global source
+    # interpolation/flood graphs are released before the next field begins.
+    flooded_temp = flood_3d_source(ds_temp, "temp")
+    temp = finish_3d_target(
+        glorys_to_t(flooded_temp).astype(np.float32), "temp"
+    )
+    temp.name = "temp"
+    del flooded_temp
+    gc.collect()
+
+    flooded_sal = flood_3d_source(ds_sal, "salt")
+    salt = finish_3d_target(
+        glorys_to_t(flooded_sal).astype(np.float32), "salt"
+    )
+    salt.name = "salt"
+    del flooded_sal
+    gc.collect()
+
     phase_start = perf_counter()
-    for var in ["temp", "salt", "u", "v"]:
-        print(f"Filling deep NaNs for {var}...")
-        original_dims = interped[var].dims
-        interped[var] = interped[var].ffill("zl").transpose(*original_dims)
-    report_time("vertical ffill", phase_start)
+    flooded_ssh = flood.flood_kara(ds_ssh)
+    ssh = flooded_ssh.isel(z=0).drop_vars("z")
+    if "time" in ssh.dims:
+        ssh = ssh.assign_coords(time=output_time)
+    else:
+        ssh = ssh.expand_dims(time=output_time)
+    ssh = glorys_to_t(ssh).astype(np.float32)
+    ssh.load()
+    ssh.name = "ssh"
+    report_time("ssh: flood + regrid + compute", phase_start)
+    del flooded_ssh
+    gc.collect()
+
+    # Velocity rotation needs both earth-relative components. Build both
+    # target fields first, then materialize them in one shared Dask compute so
+    # the source u/v interpolation and flooding graphs execute only once.
+    flooded_u = flood_3d_source(ds_u, "earth u")
+    flooded_v = flood_3d_source(ds_v, "earth v")
+    velocity_source = xarray.merge((flooded_u, flooded_v))
+
+    phase_start = perf_counter()
+    earth_at_u = glorys_to_u(velocity_source)
+    uo = (
+        np.cos(angle_u) * earth_at_u[u_var]
+        + np.sin(angle_u) * earth_at_u[v_var]
+    ).astype(np.float32)
+    uo.name = "u"
+    earth_at_v = glorys_to_v(velocity_source)
+    vo = (
+        -np.sin(angle_v) * earth_at_v[u_var]
+        + np.cos(angle_v) * earth_at_v[v_var]
+    ).astype(np.float32)
+    vo.name = "v"
+
+    print("Filling deep NaNs for u and v...")
+    uo = uo.ffill("zl").transpose(*uo.dims)
+    vo = vo.ffill("zl").transpose(*vo.dims)
+    velocity_target = xarray.merge((uo, vo))
+    velocity_target.load()
+    uo = velocity_target["u"]
+    vo = velocity_target["v"]
+    report_time("shared U/V regrid + rotation + compute", phase_start)
+    del earth_at_u, earth_at_v, velocity_source, flooded_u, flooded_v
+    gc.collect()
+
+    interped = xarray.merge((temp, salt, ssh, uo, vo)).transpose(
+        "time", "zl", "yh", "yq", "xh", "xq"
+    )
 
     xh_1d = target_grid["x"].isel(
         nxp=slice(1, None, 2), nyp=0
