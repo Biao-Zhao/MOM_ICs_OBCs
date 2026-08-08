@@ -7,8 +7,7 @@ provides a workflow for downloading regional source fields, horizontally and
 vertically remapping them to a MOM6 grid, and optionally reconstructing a
 dynamically balanced three-dimensional current field.
 
-The workflow is designed for high-resolution regional applications and has
-been used with C3200 and C9600 grids.
+The workflow can be used for both regional and global (tripolar) grids.
 
 ## Workflow
 
