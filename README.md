@@ -283,6 +283,7 @@ MOM_ICs_OBCs/
 ```text
 ICs/C3200/NK85/MOM6_IC_2022112812_C3200.nc
 ICs/C3200/NK85/MOM6_IC_2022112812_C3200_geocurrents.nc
+ICs/C3200/NK85/SIS2_IC_2022112812_C3200.nc
 OBCs/C3200/NK85/2022112812/thetao_001.nc
 OBCs/C3200/NK85/2022112812/so_001.nc
 OBCs/C3200/NK85/2022112812/zos_001.nc
@@ -291,7 +292,4 @@ OBCs/C3200/NK85/2022112812/uv_001.nc
 
 ## Acknowledgements
 
-Workflow development and geostrophic-adjustment integration: **Dr Biao Zhao**.
-
-The IC and OBC preparation workflow adaptes the Python processing scripts
-developed by **Dr. Jing Chen**.
+Workflow development and geostrophic-adjustment integration: **Dr Biao Zhao**. The IC and OBC preparation workflow adapted the Python processing scripts developed by **Dr. Jing Chen**.
