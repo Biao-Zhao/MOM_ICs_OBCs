@@ -1310,8 +1310,19 @@ def reconstruct(
                     & wet[:-2, 1:-1]
                     & wet[2:, 1:-1]
                 )
-                if level + 1 < nk:
-                    safe_t &= z[level + 1] > -depth
+                safe_inner = np.zeros_like(wet)
+                safe_inner[1:-1, 1:-1] = (
+                    safe_t[1:-1, 1:-1]
+                    & safe_t[1:-1, :-2]
+                    & safe_t[1:-1, 2:]
+                    & safe_t[:-2, 1:-1]
+                    & safe_t[2:, 1:-1]
+                )
+                safe_t = safe_inner
+                if level + 2 < nk:
+                    safe_t &= z[level + 2] > -depth
+                else:
+                    safe_t[:] = False
 
                 dz_t = dz_geom[level] * wet
                 h_t += dz_t
