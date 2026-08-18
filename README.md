@@ -164,14 +164,14 @@ The surface-current comparison shows that the reconstruction preserves the
 full pathway and major spatial structure of the Gulf Stream.
 
 <p align="center">
-  <img src="docs/media/suface_current.png" alt="Surface current comparison" width="100%">
+  <img src="scripts/docs/media/suface_current.png" alt="Surface current comparison" width="100%">
 </p>
 
 The zonal-current section shows that the reconstruction preserves the major
 vertical current structures present in the source product.
 
 <p align="center">
-  <img src="docs/media/cross_section.png" alt="Source and reconstructed zonal-current sections" width="100%">
+  <img src="scripts/docs/media/cross_section.png" alt="Source and reconstructed zonal-current sections" width="100%">
 </p>
 
 The barotropic correction substantially reduces the depth-integrated
@@ -179,7 +179,7 @@ transport divergence. This improves consistency with volume conservation and
 makes the initial current field more dynamically balanced.
 
 <p align="center">
-  <img src="docs/media/divergence.png" alt="Depth-integrated divergence before and after adjustment" width="100%">
+  <img src="scripts/docs/media/divergence.png" alt="Depth-integrated divergence before and after adjustment" width="100%">
 </p>
 
 
@@ -195,8 +195,8 @@ signal is most apparent.
     <th>Initialized from reconstructed IC</th>
   </tr>
   <tr>
-    <td><img src="docs/media/original.gif" alt="SSH evolution with original currents" width="100%"></td>
-    <td><img src="docs/media/reconstruction.gif" alt="SSH evolution with reconstructed currents" width="100%"></td>
+    <td><img src="scripts/docs/media/original.gif" alt="SSH evolution with original currents" width="100%"></td>
+    <td><img src="scripts/docs/media/reconstruction.gif" alt="SSH evolution with reconstructed currents" width="100%"></td>
   </tr>
 </table>
 
