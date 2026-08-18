@@ -1252,6 +1252,17 @@ def reconstruct(
                 f"{name} shape {array.shape}; expected {expected_shape}"
             )
 
+    ocean_t = (
+        np.isfinite(mask_t)
+        & (mask_t > 0.0)
+        & np.isfinite(depth)
+        & (depth > 0.0)
+    )
+    if not np.any(ocean_t):
+        raise ValueError("No wet tracer cells found from mask and depth")
+    log(f"Wet tracer points from mask/depth: {np.count_nonzero(ocean_t)}")
+    mask_t = ocean_t.astype(np.float64)
+
     metrics = build_grid_metrics(hgrid_path, ny=ny, nx=nx)
     umask, vmask = make_face_masks(mask_t)
 
@@ -1341,7 +1352,7 @@ def reconstruct(
             )
 
             for level in range(nk):
-                wet = (mask_t == 1.0) & (z[level] > -depth)
+                wet = ocean_t & (z[level] > -depth)
                 valid_t = np.asarray(
                     source_valid[level, :, :],
                     dtype=bool,
@@ -1467,7 +1478,7 @@ def reconstruct(
         rhs_t = (fx_e - fx_w + fy_n - fy_s) / area
         rhs_t *= mask_t
 
-        mask_eff = (mask_t == 1.0) & (h_t > 0.0)
+        mask_eff = ocean_t & (h_t > 0.0)
         matrix, wet_flat, _ = build_poisson_matrix(
             h_t,
             mask_eff,
