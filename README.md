@@ -203,6 +203,14 @@ signal is most apparent.
 
 ## Running the workflow
 
+Before running this workflow, clone `HCtFlood` into the
+`MOM_ICs_OBCs/scripts/` directory. This tool is used to fill land grid
+points with valid values.
+
+```bash
+git clone https://github.com/raphaeldussin/HCtFlood.git MOM_ICs_OBCs/scripts/HCtFlood
+```
+
 ### Batch processing
 
 For routine production, edit the dates, hours, resolution, vertical levels,
@@ -267,10 +275,11 @@ Forecast** product are:
 ## Repository layout
 
 ```text
-MOM_ICs_OBCs/
+MOM_ICs_OBCs/scripts/
 ├── download/
 ├── initial/
 ├── boundary/
+├── HCtFlood/ 
 ├── geostrophic_adj/
 │                  ├── matlab/
 │                  └── python/
