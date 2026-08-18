@@ -1159,9 +1159,19 @@ def reconstruct(
     hgrid_path = grid_dir / "ocean_hgrid.nc"
     mask_path = grid_dir / "ocean_mask.nc"
     topog_path = grid_dir / "topog.nc"
+    validity_path = (
+        grid_dir.parent.parent
+        / "regrid_weights"
+        / grid_dir.name
+        / "temp_salt_valid_points.nc"
+    )
     for path in (input_path, hgrid_path, mask_path, topog_path):
         if not path.is_file():
             raise FileNotFoundError(path)
+    if not validity_path.is_file():
+        raise FileNotFoundError(
+            f"{validity_path} is missing; run mode=2 before mode=4"
+        )
 
     if output_path.exists() and not overwrite:
         raise FileExistsError(
@@ -1218,6 +1228,12 @@ def reconstruct(
         f"IC dimensions: time={nt}, zl={nk}, yh={ny}, xh={nx}, "
         f"xq={nx + 1}, yq={ny + 1}"
     )
+    with Dataset(validity_path, "r") as validity_ds:
+        if "temp_salt_valid" not in validity_ds.variables:
+            raise KeyError(f"Missing temp_salt_valid in {validity_path}")
+        if validity_ds.variables["temp_salt_valid"].shape != (nk, ny, nx):
+            raise ValueError("Unexpected temp_salt_valid dimensions")
+    log(f"Using pre-fill validity mask: {validity_path}")
 
     with Dataset(mask_path, "r") as mask_ds:
         mask_t = read_array(mask_ds.variables["mask"][:])
@@ -1276,15 +1292,16 @@ def reconstruct(
 
     try:
         first_pass_start = perf_counter()
-        with Dataset(input_path, "r") as source, Dataset(
-            partial_path,
-            "r+",
-        ) as destination:
+        with Dataset(validity_path, "r") as validity_ds, Dataset(
+            input_path,
+            "r",
+        ) as source, Dataset(partial_path, "r+") as destination:
             temp_var = source.variables["temp"]
             salt_var = source.variables["salt"]
             ssh_var = source.variables["ssh"]
             source_u = source.variables["u"]
             source_v = source.variables["v"]
+            source_valid = validity_ds.variables["temp_salt_valid"]
             destination_u = destination.variables["u"]
             destination_v = destination.variables["v"]
 
@@ -1296,33 +1313,17 @@ def reconstruct(
                 f2d,
             )
             log(
-                "[INFO] Preserving original currents next to coasts "
-                "and in the bottom wet layer."
+                "[INFO] Preserving original currents where temperature/"
+                "salinity gradients are not reliable."
             )
 
             for level in range(nk):
                 wet = (mask_t == 1.0) & (z[level] > -depth)
-                safe_t = np.zeros_like(wet)
-                safe_t[1:-1, 1:-1] = (
-                    wet[1:-1, 1:-1]
-                    & wet[1:-1, :-2]
-                    & wet[1:-1, 2:]
-                    & wet[:-2, 1:-1]
-                    & wet[2:, 1:-1]
+                valid_t = np.asarray(
+                    source_valid[level, :, :],
+                    dtype=bool,
                 )
-                safe_inner = np.zeros_like(wet)
-                safe_inner[1:-1, 1:-1] = (
-                    safe_t[1:-1, 1:-1]
-                    & safe_t[1:-1, :-2]
-                    & safe_t[1:-1, 2:]
-                    & safe_t[:-2, 1:-1]
-                    & safe_t[2:, 1:-1]
-                )
-                safe_t = safe_inner
-                if level + 2 < nk:
-                    safe_t &= z[level + 2] > -depth
-                else:
-                    safe_t[:] = False
+                safe_t = wet & valid_t
 
                 dz_t = dz_geom[level] * wet
                 h_t += dz_t

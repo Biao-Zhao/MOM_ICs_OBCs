@@ -364,6 +364,74 @@ def write_initial(config):
         raise ValueError(
             "Expected zl to increase monotonically from shallow to deep."
         )
+    validity_file = os.path.join(
+        weight_dir,
+        "temp_salt_valid_points.nc",
+    )
+    reuse_validity = False
+    if os.path.isfile(validity_file):
+        try:
+            with xarray.open_dataset(validity_file) as existing:
+                existing_mask = existing["temp_salt_valid"]
+                expected_shape = (
+                    len(zl_values),
+                    target_t.sizes["yh"],
+                    target_t.sizes["xh"],
+                )
+                reuse_validity = (
+                    existing_mask.shape == expected_shape
+                    and "zl" in existing.coords
+                    and np.allclose(existing["zl"].values, zl_values)
+                )
+        except (KeyError, OSError, ValueError):
+            reuse_validity = False
+    make_validity = not reuse_validity
+    if make_validity:
+        print("Creating pre-fill validity mask:", validity_file)
+        phase = perf_counter()
+        temp_valid = ds_temp.assign_coords(time=output_time).interp(
+            depth=ztarget
+        ).notnull()
+        salt_valid = ds_sal.assign_coords(time=output_time).interp(
+            depth=ztarget
+        ).notnull()
+        valid_fraction = glorys_to_t(
+            (temp_valid & salt_valid).astype(np.float32)
+        )
+        temp_salt_valid = valid_fraction >= 0.999
+        if "time" in temp_salt_valid.dims:
+            temp_salt_valid = temp_salt_valid.all("time")
+        temp_salt_valid = temp_salt_valid.astype(np.uint8)
+        temp_salt_valid.name = "temp_salt_valid"
+        temp_salt_valid.attrs = {
+            "long_name": "Temperature and salinity valid before filling",
+            "flag_values": np.array([0, 1], dtype=np.uint8),
+            "flag_meanings": "filled original",
+            "valid_fraction_threshold": np.float32(0.999),
+        }
+        validity_partial = validity_file + ".partial"
+        if os.path.exists(validity_partial):
+            os.remove(validity_partial)
+        temp_salt_valid.to_netcdf(
+            validity_partial,
+            format="NETCDF4",
+            engine="netcdf4",
+            encoding={
+                "temp_salt_valid": {
+                    "dtype": "uint8",
+                    "_FillValue": None,
+                    "zlib": True,
+                    "complevel": 1,
+                    "shuffle": True,
+                }
+            },
+        )
+        os.replace(validity_partial, validity_file)
+        report_time("create pre-fill validity mask", phase)
+        del temp_valid, salt_valid, valid_fraction, temp_salt_valid
+        gc.collect()
+    else:
+        print("Reusing pre-fill validity mask:", validity_file)
 
     # Process and materialize each tracer independently so the global source
     # interpolation/flood graphs are released before the next field begins.
