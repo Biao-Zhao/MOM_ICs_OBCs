@@ -115,6 +115,7 @@ from scipy.sparse.linalg import cg
 RHO0 = 1025.0
 GRAVITY = 9.8
 OMEGA = 7.292115e-5
+EQUATORIAL_EXCLUSION_LATITUDE = 5.0
 
 
 @dataclass
@@ -452,7 +453,7 @@ def surface_geostrophic_current(
     ssh: np.ndarray,
     mask_t: np.ndarray,
     metrics: GridMetrics,
-    f2d: np.ndarray,
+    inverse_f: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Compute the SSH-referenced current on tracer cells."""
 
@@ -513,9 +514,8 @@ def surface_geostrophic_current(
         0.0,
     )
 
-    with np.errstate(divide="ignore", invalid="ignore"):
-        u_ssh = -(GRAVITY / f2d) * dssh_dy * mask_t
-        v_ssh = +(GRAVITY / f2d) * dssh_dx * mask_t
+    u_ssh = -GRAVITY * inverse_f * dssh_dy * mask_t
+    v_ssh = +GRAVITY * inverse_f * dssh_dx * mask_t
 
     u_ssh[~np.isfinite(u_ssh)] = 0.0
     v_ssh[~np.isfinite(v_ssh)] = 0.0
@@ -1255,9 +1255,32 @@ def reconstruct(
     metrics = build_grid_metrics(hgrid_path, ny=ny, nx=nx)
     umask, vmask = make_face_masks(mask_t)
 
-    f2d = 2.0 * OMEGA * np.sin(np.deg2rad(lat))[:, np.newaxis]
-    f2d = np.broadcast_to(f2d, (ny, nx))
-    g_over_rho0_f = GRAVITY / (RHO0 * f2d)
+    with Dataset(hgrid_path, "r") as hgrid:
+        latitude_t = read_array(
+            hgrid.variables["y"][1::2, 1::2]
+        )
+    if latitude_t.shape != expected_shape:
+        raise ValueError(
+            f"tracer latitude shape {latitude_t.shape}; "
+            f"expected {expected_shape}"
+        )
+    log(
+        f"Tracer latitude range: {np.nanmin(latitude_t):.2f} - "
+        f"{np.nanmax(latitude_t):.2f} degrees"
+    )
+    coriolis_valid = (
+        np.isfinite(latitude_t)
+        & (np.abs(latitude_t) >= EQUATORIAL_EXCLUSION_LATITUDE)
+    )
+    f2d = 2.0 * OMEGA * np.sin(np.deg2rad(latitude_t))
+    inverse_f = np.zeros_like(f2d)
+    np.divide(1.0, f2d, out=inverse_f, where=coriolis_valid)
+    g_over_rho0_f = (GRAVITY / RHO0) * inverse_f
+    log(
+        "Equatorial protection: preserving original currents at "
+        f"{np.count_nonzero(~coriolis_valid)} tracer points with "
+        f"|latitude| < {EQUATORIAL_EXCLUSION_LATITUDE:.1f} degrees"
+    )
 
     interfaces = np.empty(nk + 1, dtype=np.float64)
     interfaces[0] = 0.0
@@ -1310,11 +1333,11 @@ def reconstruct(
                 ssh,
                 mask_t,
                 metrics,
-                f2d,
+                inverse_f,
             )
             log(
-                "[INFO] Preserving original currents where temperature/"
-                "salinity gradients are not reliable."
+                "[INFO] Preserving original currents where geostrophic "
+                "reconstruction is not reliable."
             )
 
             for level in range(nk):
@@ -1323,7 +1346,7 @@ def reconstruct(
                     source_valid[level, :, :],
                     dtype=bool,
                 )
-                safe_t = wet & valid_t
+                safe_t = wet & valid_t & coriolis_valid
 
                 dz_t = dz_geom[level] * wet
                 h_t += dz_t
