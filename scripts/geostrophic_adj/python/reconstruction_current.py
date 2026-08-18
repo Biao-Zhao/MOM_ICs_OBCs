@@ -1295,9 +1295,24 @@ def reconstruct(
                 metrics,
                 f2d,
             )
+            log(
+                "[INFO] Preserving original currents next to coasts "
+                "and in the bottom wet layer."
+            )
 
             for level in range(nk):
-                wet = z[level] > -depth
+                wet = (mask_t == 1.0) & (z[level] > -depth)
+                safe_t = np.zeros_like(wet)
+                safe_t[1:-1, 1:-1] = (
+                    wet[1:-1, 1:-1]
+                    & wet[1:-1, :-2]
+                    & wet[1:-1, 2:]
+                    & wet[:-2, 1:-1]
+                    & wet[2:, 1:-1]
+                )
+                if level + 1 < nk:
+                    safe_t &= z[level + 1] > -depth
+
                 dz_t = dz_geom[level] * wet
                 h_t += dz_t
 
@@ -1330,10 +1345,26 @@ def reconstruct(
                     metrics,
                     g_over_rho0_f,
                 )
+                du_dz[~safe_t] = 0.0
+                dv_dz[~safe_t] = 0.0
 
                 u_t = (u_rel + u_ssh) * wet
                 v_t = (v_rel + v_ssh) * wet
                 u_geo, v_geo = tracer_to_faces(u_t, v_t, wet)
+
+                original_u = read_array(
+                    source_u[time_index, level, :, :]
+                )
+                original_v = read_array(
+                    source_v[time_index, level, :, :]
+                )
+                safe_u = np.zeros((ny, nx + 1), dtype=bool)
+                safe_v = np.zeros((ny + 1, nx), dtype=bool)
+                safe_u[:, 1:nx] = safe_t[:, :-1] & safe_t[:, 1:]
+                safe_v[1:ny, :] = safe_t[:-1, :] & safe_t[1:, :]
+
+                u_geo = np.where(safe_u, u_geo, original_u)
+                v_geo = np.where(safe_v, v_geo, original_v)
 
                 destination_u[time_index, level, :, :] = u_geo
                 destination_v[time_index, level, :, :] = v_geo
