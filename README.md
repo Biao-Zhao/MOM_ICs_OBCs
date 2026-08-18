@@ -213,9 +213,11 @@ git clone https://github.com/raphaeldussin/HCtFlood.git MOM_ICs_OBCs/scripts/HCt
 
 ### Batch processing
 
-For routine production, edit the dates, hours, resolution, vertical levels,
-boundary duration, and geostrophic-adjustment switch in
-`Generating_MOM6_IC_OBCs.csh`, then run:
+For batch processing, configure the dates, initialization hours, resolution,
+vertical levels, boundary duration, and geostrophic-adjustment switch in
+`Generating_MOM6_IC_OBCs.csh`. In the same script, specify
+`prepare_regional_MOM6_inputs.sh` for regional applications or
+`prepare_global_MOM6_inputs.sh` for global applications. Then run:
 
 ```csh
 ./Generating_MOM6_IC_OBCs.csh
@@ -223,10 +225,12 @@ boundary duration, and geostrophic-adjustment switch in
 
 ### Manual processing
 
-Run a selected stage directly with:
+Run a selected processing stage directly using the appropriate script:
+
+For a regional configuration:
 
 ```bash
-./prepare_MOM6_inputs.sh START_DATE START_HOUR END_DATE MODE
+./prepare_regional_MOM6_inputs.sh START_DATE START_HOUR END_DATE MODE
 ```
 
 `MODE` selects the processing stage:
@@ -243,13 +247,20 @@ Examples:
 
 ```bash
 # Generate one initial condition
-./prepare_MOM6_inputs.sh 2022-11-28 12 2022-11-28 2
+./prepare_regional_MOM6_inputs.sh 2022-11-28 12 2022-11-28 2
 
 # Generate open-boundary conditions over a date range
-./prepare_MOM6_inputs.sh 2022-11-28 12 2022-12-01 3
+./prepare_regional_MOM6_inputs.sh 2022-11-28 12 2022-12-01 3
 
 # Reconstruct geostrophic currents for an existing initial condition
-./prepare_MOM6_inputs.sh 2022-11-28 12 2022-11-28 4
+./prepare_regional_MOM6_inputs.sh 2022-11-28 12 2022-11-28 4
+```
+
+For a global configuration, open boundary conditions are not required.
+Therefore, only `MODE=1`, `MODE=2`, and `MODE=4` or `MODE=all` are needed:
+
+```bash
+./prepare_global_MOM6_inputs.sh START_DATE START_HOUR END_DATE MODE
 ```
 
 ## Grid and source data
@@ -283,7 +294,8 @@ MOM_ICs_OBCs/scripts/
 ├── geostrophic_adj/
 │                  ├── matlab/
 │                  └── python/
-├── prepare_MOM6_inputs.sh
+├── prepare_regional_MOM6_inputs.sh
+├── prepare_global_MOM6_inputs.sh
 └── Generating_MOM6_IC_OBCs.csh
 ```
 

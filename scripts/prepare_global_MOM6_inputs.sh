@@ -38,42 +38,35 @@ START_HOUR="12"
 # use 6-hourly data in UTC, could be changed according needs, for example ("00" "06" "12" "18") or ("00" "01" "02" "03" "04" ........) 
 TIME_SLOTS=("00" "06" "12" "18")
 
-# Spefify which boundaries will be processed, for example ("south" "north" "east" "west") 
-SEGMENTS=("south" "north" "east")
-
 #grid cases
-res="C9600"
+res="C768"
 
 #vertical levels
-NK="85"
+NK="75"
 
 # Number of processes used to run Kara flooding across vertical levels
-KARA_WORKERS=4
+KARA_WORKERS=32
 
-# Output directory for GLORYS and IC & OBC data
-BASE_DIR="/ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs"
-GLORYS_DIR="${BASE_DIR}/CMEMS"
-IC_OUTPUT_DIR="${BASE_DIR}/ICs/${res}/NK${NK}"
-OBC_OUTPUT_DIR="${BASE_DIR}/OBCs/${res}/NK${NK}"
-REGRID_WEIGHT_DIR="${BASE_DIR}/regrid_weights/${res}"
+# runscripts and work directory
+BASE_DIR="/ncrc/home1/Biao.Zhao/test/MOM_ICs_OBCs"
+WORK_DIR="/gpfs/f6/bil-coastal-gfdl/scratch/Biao.Zhao/test"
 
-# Paths of downloading, making initial $ open boundary condition scripts
+# Paths of downloading and making initial condition scripts
 DOWNLOAD_SCRIPT="${BASE_DIR}/scripts/download/download_cmems_glorys.py"
 INITIAL_SCRIPT="${BASE_DIR}/scripts/initial/write_MOM6_IC.py"
 SIS2_INITIAL_SCRIPT="${BASE_DIR}/scripts/initial/write_SIS2_IC.py"
-BOUNDARY_MERGE_SCRIPT="${BASE_DIR}/scripts/boundary/merge_glorys.py"
-BOUNDARY_MAKE_SCRIPT="${BASE_DIR}/scripts/boundary/write_MOM6_OBC.py"
 GEO_RECONSTRUCTION_SCRIPT="${BASE_DIR}/scripts/geostrophic_adj/python/reconstruction_current.py"
-# vertical grid and horizontal superrid file of MOM6
-VGRID_FILE="${BASE_DIR}/grid/${res}/vgrid_${NK}.nc"
-HGRID_FILE="${BASE_DIR}/grid/${res}/ocean_hgrid.nc"
 
-# Set the download region. It should be larger than the model domain.
-# Comment out this section to download global data.
-MIN_LON=-105
-MAX_LON=-35
-MIN_LAT=10
-MAX_LAT=55
+# Re/Analysis data directory
+GLORYS_DIR="${WORK_DIR}/CMEMS"
+# vertical grid and horizontal superrid file of MOM6
+VGRID_FILE="${WORK_DIR}/grid/${res}/vgrid_${NK}.nc"
+HGRID_FILE="${WORK_DIR}/grid/${res}/ocean_hgrid.nc"
+
+# Path of store generateed files 
+IC_OUTPUT_DIR="${WORK_DIR}/ICs/${res}/NK${NK}"
+OBC_OUTPUT_DIR="${WORK_DIR}/OBCs/${res}/NK${NK}"
+REGRID_WEIGHT_DIR="${WORK_DIR}/regrid_weights/${res}"
 
 # use python3, can be changed according the local enviroment 
 EXE="python3"
@@ -160,8 +153,8 @@ for HOUR in "${HOURS_TO_RUN[@]}"; do
 
   # IC output file
   IC_File="${IC_OUTPUT_DIR}/MOM6_IC_${DATE_COMPACT}${HOUR}_${res}.nc"
-
-  YAML="${BASE_DIR}/scripts/initial/glorys_IC_${res}.yaml"
+  mkdir -p ${WORK_DIR}/scripts/initial
+  YAML="${WORK_DIR}/scripts/initial/glorys_IC_${res}.yaml"
 
   echo "[INFO] Writing ${YAML}"
   cat > "${YAML}" <<EOF
@@ -236,103 +229,7 @@ fi
 # ===================================== Step 3: Making open boundary condition  =================================
 if [[ "$MODE" == "3" || "$MODE" == "all" ]]; then
 
-for i in "${!SEGMENTS[@]}"; do SEGS+=($((i+1))); done
-
-END_NEXT=$(date -I -d "$END_DATE + 1 day")
-
-CURRENT_DATE="$START_DATE"
-
-while [[ "$CURRENT_DATE" != "$END_NEXT" ]]; do
-  for HOUR in "${TIME_SLOTS[@]}"; do
-
-    echo "[INFO] Merging booundary data for ${CURRENT_DATE} ${HOUR} UTC..."
-
-    DATE_COMPACT="${CURRENT_DATE//-/}"
-    THETAO_PATH="${GLORYS_DIR}/${DATE_COMPACT}/glo12_rg_6h-i_${DATE_COMPACT}-${HOUR}h_3D-thetao_hcst.nc"
-    SO_PATH="${GLORYS_DIR}/${DATE_COMPACT}/glo12_rg_6h-i_${DATE_COMPACT}-${HOUR}h_3D-so_hcst.nc"
-    UOVO_PATH="${GLORYS_DIR}/${DATE_COMPACT}/glo12_rg_6h-i_${DATE_COMPACT}-${HOUR}h_3D-uovo_hcst.nc"
-    SSH_PATH="${GLORYS_DIR}/${DATE_COMPACT}/MOL_${DATE_COMPACT}.nc"
-
-    YAML_MERGE="${BASE_DIR}/scripts/boundary/config_merge_glorys.yaml"
-  
-    mkdir -p ${BASE_DIR}/scripts/temp/${DATE_COMPACT}/
-    echo "[INFO] Writing ${YAML_MERGE}"
-
-    cat > "${YAML_MERGE}" <<EOF
-thetao_fn: ${THETAO_PATH}
-so_fn: ${SO_PATH}
-uovo_fn: ${UOVO_PATH}
-ssh_fn: ${SSH_PATH}
-merged_fn: ${BASE_DIR}/scripts/temp/${DATE_COMPACT}/merged_${DATE_COMPACT}-${HOUR}.nc
-ssh_time: ${HOUR}
-min_lon: ${MIN_LON}
-max_lon: ${MAX_LON}
-min_lat: ${MIN_LAT}
-max_lat: ${MAX_LAT}
-EOF
-
-    # 1. merging the salinity, temperature, currents and sea surface elevation files into one single file on model domain
-    ${EXE} $BOUNDARY_MERGE_SCRIPT  --config ${YAML_MERGE}
-
-    YAML_REGRID="${BASE_DIR}/scripts/boundary/config_regrid_glorys.yaml"
-
-    echo "[INFO] Writing ${YAML_REGRID}"
-{
-cat <<EOF
-glorys_dir: ${BASE_DIR}/scripts/temp/${DATE_COMPACT}
-output_dir: ${BASE_DIR}/scripts/temp/
-hgrid: ${HGRID_FILE}
-resolution: ${res}
-regrid_dir: ${REGRID_WEIGHT_DIR}
-ncrcat_years: true  # Set to false if you want to skip ncrcat_years
-ncrcat_names:
-  - 'thetao'
-  - 'so'
-  - 'zos'
-  - 'uv'
-variables:
-  - 'thetao'
-  - 'so'
-  - 'zos'
-  - 'uv'
-segments:
-EOF
-  i=1
-  for b in "${SEGMENTS[@]}"; do
-    echo "  - id: ${i}"
-    echo "    border: '${b}'"
-    i=$((i+1))
-  done
-}> "${YAML_REGRID}"
-  # 2. extract information at the boundaries specifieed in "config_regrid_glorys.yaml"
-  ${EXE} ${BOUNDARY_MAKE_SCRIPT} --config ${YAML_REGRID} --year ${DATE_COMPACT:0:4} --month ${DATE_COMPACT:4:2} --day ${DATE_COMPACT:6:2} --hour ${HOUR}
-
-  done
-  # Move to next day
-  CURRENT_DATE=$(date -I -d "$CURRENT_DATE + 1 day")
-done
-
-  # 3. Merging booundary data
-  mkdir -p ${OBC_OUTPUT_DIR}/${START_DATE:0:4}${START_DATE:5:2}${START_DATE:8:2}${START_HOUR} 
-  VARS=(thetao so zos uv)
-  for var in "${VARS[@]}"; do
-    for seg in "${SEGS[@]}"; do
-      segnum=$(printf "%03d" "$seg")
-      mapfile -t files < <(find "${BASE_DIR}/scripts/temp/" -maxdepth 1 -type f -name "${var}_${segnum}_*.nc" | sort -V)
-      if (( ${#files[@]} == 0 )); then
-        echo "[ERROR] No input files for ${var}_${segnum} in ${BASE_DIR}/scripts/temp/."
-        echo "[ERROR] Expected pattern: ${var}_${segnum}_YYYYMMDD-HH.nc"
-        exit 1
-      fi
-      out="${OBC_OUTPUT_DIR}/${START_DATE:0:4}${START_DATE:5:2}${START_DATE:8:2}${START_HOUR}/${var}_${segnum}.nc"
-      printf '    %s\n' "${files[@]}"
-      echo "[INFO] ncrcat ${#files[@]} files → ${out}"
-      ncrcat "${files[@]}" "${out}"
-    done
-  done
-
-  rm -r ${BASE_DIR}/scripts/temp/* 
-echo "[INFO] Step 3 finished successfully."
+echo "[INFO] Skipping Step 3, global configuration doesn't need open boundary condition"
 
 fi
 
@@ -372,7 +269,7 @@ if [[ "${MODE}" == "4" ]]; then
     ${EXE} -u "${GEO_RECONSTRUCTION_SCRIPT}" \
             --input "${IC_FILE}" \
             --output "${IC_GEO_FILE}" \
-            --grid-dir "${BASE_DIR}/grid/${res}" \
+            --grid-dir "${WORK_DIR}/grid/${res}" \
             --plot-dir "${GEO_PLOT_DIR}" \
             --plot-format svg
 
