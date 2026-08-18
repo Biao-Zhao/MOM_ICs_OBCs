@@ -56,6 +56,10 @@ Important options
 ``--no-plots``
     Disable diagnostic plotting.  Matplotlib is not required in this mode.
 
+``--skip-barotropic-correction``
+    Write the reconstructed geostrophic currents without solving the
+    depth-integrated Poisson problem or applying its barotropic correction.
+
 ``--reference FILE``
     Compare the generated U/V fields with an existing result, one vertical
     level at a time, and include the statistics in the summary JSON file.
@@ -1146,6 +1150,7 @@ def reconstruct(
     cg_rtol: float,
     cg_maxiter: int,
     require_convergence: bool,
+    apply_barotropic_correction: bool,
     overwrite: bool,
 ) -> tuple[SolverDiagnostics, PlotDiagnostics]:
     """Run the complete reconstruction and write the adjusted IC file."""
@@ -1407,24 +1412,29 @@ def reconstruct(
         )
         rhs = rhs_t.ravel(order="C")[wet_flat].copy()
         rhs -= np.mean(rhs)
-
-        chi_vector, info, iterations, relative_residual = solve_poisson(
-            matrix,
-            rhs,
-            rtol=cg_rtol,
-            maxiter=cg_maxiter,
-        )
-        if info != 0 and require_convergence:
-            raise RuntimeError(
-                f"Conjugate-gradient solver did not converge: info={info}, "
-                f"relative_residual={relative_residual:.6e}"
+        if apply_barotropic_correction:
+            chi_vector, info, iterations, relative_residual = solve_poisson(
+                matrix,
+                rhs,
+                rtol=cg_rtol,
+                maxiter=cg_maxiter,
             )
-        if info != 0:
-            log(
-                "[WARNING] CG did not converge within the requested "
-                "iterations. Continuing to match the MATLAB workflow, "
-                "which also writes the current iterate when pcg flag != 0."
-            )
+            if info != 0 and require_convergence:
+                raise RuntimeError(
+                    "Conjugate-gradient solver did not converge: "
+                    f"info={info}, "
+                    f"relative_residual={relative_residual:.6e}"
+                )
+            if info != 0:
+                log(
+                    "[WARNING] CG did not converge within the requested "
+                    "iterations. Continuing to match the MATLAB workflow, "
+                    "which also writes the current iterate when pcg flag != 0."
+                )
+        else:
+            log("[INFO] Skipping barotropic correction.")
+            chi_vector = np.zeros(wet_flat.size, dtype=np.float64)
+            info, iterations, relative_residual = 0, 0, 1.0
 
         chi_t = np.zeros((ny, nx), dtype=np.float64)
         chi_t.ravel(order="C")[wet_flat] = chi_vector
@@ -1447,7 +1457,8 @@ def reconstruct(
         with Dataset(partial_path, "r+") as destination:
             destination_u = destination.variables["u"]
             destination_v = destination.variables["v"]
-            for level in range(nk):
+            levels_to_correct = range(nk) if apply_barotropic_correction else ()
+            for level in levels_to_correct:
                 u_level = read_array(
                     destination_u[time_index, level, :, :]
                 )
@@ -1457,9 +1468,11 @@ def reconstruct(
                 destination_u[time_index, level, :, :] = u_level + uc
                 destination_v[time_index, level, :, :] = v_level + vc
                 if level == 0 or (level + 1) % 10 == 0 or level + 1 == nk:
-                    log(f"Applied correction to level {level + 1}/{nk}")
+                    if apply_barotropic_correction:
+                        log(f"Applied correction to level {level + 1}/{nk}")
             destination.sync()
-        elapsed("apply/write barotropic correction", second_pass_start)
+        if apply_barotropic_correction:
+            elapsed("apply/write barotropic correction", second_pass_start)
 
         he, hn = face_depths(h_t)
         hu_new = hu + he * dchi_u / metrics.dx_u
@@ -1605,6 +1618,14 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Fail instead of matching MATLAB when CG reaches maxiter",
     )
+    parser.add_argument(
+        "--skip-barotropic-correction",
+        action="store_true",
+        help=(
+            "Write reconstructed geostrophic currents without the "
+            "depth-integrated Poisson correction"
+        ),
+    )
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -1647,6 +1668,7 @@ def main() -> int:
         cg_rtol=args.cg_rtol,
         cg_maxiter=args.cg_maxiter,
         require_convergence=args.require_convergence,
+        apply_barotropic_correction=not args.skip_barotropic_correction,
         overwrite=args.overwrite,
     )
 

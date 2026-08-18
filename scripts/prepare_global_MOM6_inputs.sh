@@ -47,6 +47,10 @@ NK="75"
 # Number of processes used to run Kara flooding across vertical levels
 KARA_WORKERS=32
 
+# Apply the depth-integrated Poisson (barotropic) correction after rebuilding
+# the geostrophic currents. Set to "false" to keep the uncorrected currents.
+APPLY_BAROTROPIC_CORRECTION="true"
+
 # runscripts and work directory
 BASE_DIR="/ncrc/home1/Biao.Zhao/test/MOM_ICs_OBCs"
 WORK_DIR="/gpfs/f6/bil-coastal-gfdl/scratch/Biao.Zhao/test"
@@ -255,6 +259,7 @@ if [[ "${MODE}" == "4" ]]; then
     echo "[INFO] Input:  ${IC_FILE}"
     echo "[INFO] Output: ${IC_GEO_FILE}"
     echo "[INFO] Plots:  ${GEO_PLOT_DIR}"
+    echo "[INFO] Apply barotropic correction: ${APPLY_BAROTROPIC_CORRECTION}"
 
     if [[ ! -f "${IC_FILE}" ]]; then
         echo "[ERROR] Initial-condition file does not exist:"
@@ -266,12 +271,17 @@ if [[ "${MODE}" == "4" ]]; then
         echo "[INFO] Geostrophic IC already exists, skipping:"
         echo "        ${IC_GEO_FILE}"
     else
+    GEO_CORRECTION_ARG=""
+    if [[ "${APPLY_BAROTROPIC_CORRECTION}" == "false" ]]; then
+        GEO_CORRECTION_ARG="--skip-barotropic-correction"
+    fi
     ${EXE} -u "${GEO_RECONSTRUCTION_SCRIPT}" \
             --input "${IC_FILE}" \
             --output "${IC_GEO_FILE}" \
             --grid-dir "${WORK_DIR}/grid/${res}" \
             --plot-dir "${GEO_PLOT_DIR}" \
-            --plot-format svg
+            --plot-format svg \
+            ${GEO_CORRECTION_ARG}
 
     echo "[INFO] Step 4 finished successfully."
     fi
