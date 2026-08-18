@@ -37,6 +37,53 @@ For a C9600 grid (`6145 × 3169`), this normally takes about 15–20 minutes, de
 Later runs on the same source and target grids can read the existing weights
 and usually complete in about 3 minutes.
 
+## Sea-ice initialization
+
+For coupled MOM6--SIS2 simulations, the workflow creates a two-dimensional
+SIS2 initial-condition file from the daily CMEMS sea-ice analysis. The source
+analysis and SIS2 describe ice thickness using related, but not identical,
+quantities:
+
+| Analysis data | Physical meaning | SIS2 initial condition |
+|---|---|---|
+| `siconc` | Fraction of the source grid cell covered by sea ice (0--1) | `aice`: total sea-ice concentration (0--1) |
+| `sithick` | Mean thickness over the ice-covered part of the source grid cell (m) | `hm`: ice mass per unit ice-covered area (kg m<sup>-2</sup>) |
+
+Because `sithick` is not a grid-cell mean thickness, it is not remapped
+directly. Instead, the source grid-cell-equivalent ice volume is first formed
+from concentration and ice thickness. Concentration and ice volume are then
+remapped separately and conservatively to the MOM6/SIS2 tracer grid:
+
+```math
+\begin{aligned}
+V_{\mathrm{ice}}^{\mathrm{src}}
+  &= C^{\mathrm{src}} h_{\mathrm{ice}}^{\mathrm{src}}, \\
+C^{\mathrm{dst}}
+  &= \mathcal{R}\!\left(C^{\mathrm{src}}\right), \\
+V_{\mathrm{ice}}^{\mathrm{dst}}
+  &= \mathcal{R}\!\left(V_{\mathrm{ice}}^{\mathrm{src}}\right), \\
+h_{\mathrm{ice}}^{\mathrm{dst}}
+  &= \frac{V_{\mathrm{ice}}^{\mathrm{dst}}}{C^{\mathrm{dst}}}, \\
+\mathrm{aice} &= C^{\mathrm{dst}}, \\
+\mathrm{hm} &= \rho_{\mathrm{ice}} h_{\mathrm{ice}}^{\mathrm{dst}}.
+\end{aligned}
+```
+
+Here, $\mathcal{R}$ is the conservative remapping operator and the default ice
+density is $\rho_{\mathrm{ice}}=905\ \mathrm{kg\,m^{-3}}$. Remapped
+concentrations below $10^{-6}$ are set to zero. Note that `hm` is the mass per
+unit **ice-covered** area; the corresponding grid-cell-mean ice mass is
+`aice * hm`.
+
+<p align="center">
+  <img src="sea_ice.png" alt="Sea-ice concentration in the source analysis, on the MOM6 grid, and in the MOM6-SIS2 simulation" width="100%">
+</p>
+
+Sea-ice concentration in the Northern Hemisphere (top) and Southern
+Hemisphere (bottom). From left to right: the original CMEMS analysis, the
+field conservatively remapped to the MOM6/SIS2 grid, and the MOM6--SIS2
+simulation.
+
 ## Geostrophic adjustment
 
 ### Motivation
