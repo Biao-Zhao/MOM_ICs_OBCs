@@ -237,7 +237,8 @@ def write_initial(config):
         .assign_coords(lat=ds_temp.lat, lon=ds_temp.lon)
     )
 
-    vgrid = xarray.open_dataarray(vgrid_file)
+    vgrid_ds = xarray.open_dataset(vgrid_file)
+    vgrid = vgrid_ds["dz"]
     z = vgrid_to_layers(vgrid)
     ztarget = xarray.DataArray(
         z,
