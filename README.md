@@ -76,7 +76,7 @@ unit **ice-covered** area; the corresponding grid-cell-mean ice mass is
 `aice * hm`.
 
 <p align="center">
-  <img src="sea_ice.png" alt="Sea-ice concentration in the source analysis, on the MOM6 grid, and in the MOM6-SIS2 simulation" width="100%">
+  <img src="scripts/docs/media/sea_ice.png" alt="Sea-ice concentration in the source analysis, on the MOM6 grid, and in the MOM6-SIS2 simulation" width="100%">
 </p>
 
 Sea-ice concentration in the Northern Hemisphere (top) and Southern
