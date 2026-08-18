@@ -328,7 +328,9 @@ Forecast** product are:
 - potential temperature (`thetao`);
 - salinity (`so`);
 - zonal and meridional velocity (`uo`, `vo`);
-- sea-surface height.
+- sea-surface height;
+- sea-ice concentration (`siconc`);
+- sea-ice thickness (`sithick`).
 
 ## Repository layout
 
