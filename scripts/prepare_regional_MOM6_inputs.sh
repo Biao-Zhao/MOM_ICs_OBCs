@@ -52,11 +52,11 @@ KARA_WORKERS=32
 
 # Apply the depth-integrated Poisson (barotropic) correction after rebuilding
 # the geostrophic currents. Set to "false" to keep the uncorrected currents.
-APPLY_BAROTROPIC_CORRECTION="true"
+APPLY_BAROTROPIC_CORRECTION="false"
 
 # runscripts and work directory
-BASE_DIR="/ncrc/home1/Biao.Zhao/test/MOM_ICs_OBCs"
-WORK_DIR="/gpfs/f6/bil-coastal-gfdl/scratch/Biao.Zhao/test"
+BASE_DIR="/ncrc/home1/Biao.Zhao/grid_prep/MOM_ICs_OBCs"
+WORK_DIR="/gpfs/f6/bil-coastal-gfdl/scratch/Biao.Zhao/MOM_ICs_OBCs"
 
 # Paths of downloading, making initial, and open boundary condition scripts
 DOWNLOAD_SCRIPT="${BASE_DIR}/scripts/download/download_cmems_glorys.py"
