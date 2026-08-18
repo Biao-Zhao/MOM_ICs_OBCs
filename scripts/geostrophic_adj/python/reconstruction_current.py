@@ -1341,12 +1341,10 @@ def reconstruct(
                 rho = rho_eos(temperature, salinity, float(z[level]))
                 du_dz, dv_dz = thermal_wind_shear(
                     rho,
-                    wet,
+                    safe_t,
                     metrics,
                     g_over_rho0_f,
                 )
-                du_dz[~safe_t] = 0.0
-                dv_dz[~safe_t] = 0.0
 
                 u_t = (u_rel + u_ssh) * wet
                 v_t = (v_rel + v_ssh) * wet
