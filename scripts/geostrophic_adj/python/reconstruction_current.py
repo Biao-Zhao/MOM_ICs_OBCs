@@ -76,15 +76,16 @@ Method
 ------
 
 This is a Python implementation of the MATLAB workflow in
-``reconstruction_current.m``.  The numerical logic is intentionally kept the
-same:
+``reconstruction_current.m``.  It uses the same density and geostrophic-current
+reconstruction, with a symmetric finite-volume barotropic projection:
 
 1. Compute in-situ density with the Jackett and McDougall (1995) polynomial
    used by ``rho_eos.m``.
 2. Compute SSH-referenced geostrophic currents and thermal-wind shear on MOM6
    tracer cells.
 3. Interpolate the currents to MOM6 U/V faces.
-4. Solve the same depth-integrated Poisson problem with conjugate gradients.
+4. Solve a topology-aware, depth-integrated Poisson problem with conjugate
+   gradients.
 5. Add the depth-independent velocity correction and overwrite ``u`` and
    ``v`` in a copy of the original IC file.
 
@@ -109,13 +110,15 @@ from typing import Any
 import numpy as np
 from netCDF4 import Dataset
 from scipy.sparse import coo_matrix, csr_matrix
-from scipy.sparse.linalg import cg
+from scipy.sparse.csgraph import connected_components
+from scipy.sparse.linalg import LinearOperator, cg
 
 
 RHO0 = 1025.0
 GRAVITY = 9.8
 OMEGA = 7.292115e-5
 EQUATORIAL_EXCLUSION_LATITUDE = 5.0
+TOPOLOGY_POINT_TOLERANCE = 1.0e-7
 
 
 @dataclass
@@ -128,6 +131,14 @@ class GridMetrics:
     dy_u: np.ndarray
     dx_v: np.ndarray
     dy_v: np.ndarray
+
+
+@dataclass(frozen=True)
+class GridTopology:
+    """Horizontal connections not represented by array adjacency."""
+
+    periodic_x: bool
+    north_fold: bool
 
 
 @dataclass
@@ -218,6 +229,92 @@ def read_array(data: Any) -> np.ndarray:
     if np.ma.isMaskedArray(data):
         data = data.filled(np.nan)
     return np.asarray(data, dtype=np.float64)
+
+
+def spherical_points_match(
+    lon_a: np.ndarray,
+    lat_a: np.ndarray,
+    lon_b: np.ndarray,
+    lat_b: np.ndarray,
+) -> bool:
+    """Return whether two lon/lat arrays identify the same sphere points."""
+
+    if lon_a.shape != lon_b.shape or lat_a.shape != lat_b.shape:
+        return False
+
+    def unit_vectors(lon: np.ndarray, lat: np.ndarray) -> np.ndarray:
+        lon_radians = np.deg2rad(lon)
+        lat_radians = np.deg2rad(lat)
+        cos_latitude = np.cos(lat_radians)
+        return np.stack(
+            (
+                cos_latitude * np.cos(lon_radians),
+                cos_latitude * np.sin(lon_radians),
+                np.sin(lat_radians),
+            ),
+            axis=-1,
+        )
+
+    difference = unit_vectors(lon_a, lat_a) - unit_vectors(lon_b, lat_b)
+    distances = np.linalg.norm(difference, axis=-1)
+    return bool(
+        np.all(np.isfinite(distances))
+        and np.max(distances) <= TOPOLOGY_POINT_TOLERANCE
+    )
+
+
+def read_tracer_latitude_and_topology(
+    hgrid_path: Path,
+    ny: int,
+    nx: int,
+) -> tuple[np.ndarray, GridTopology]:
+    """Read tracer latitude and detect periodic/fold grid connections."""
+
+    with Dataset(hgrid_path, "r") as hgrid:
+        x_variable = hgrid.variables["x"]
+        y_variable = hgrid.variables["y"]
+        expected_supergrid_shape = (2 * ny + 1, 2 * nx + 1)
+        if x_variable.shape != expected_supergrid_shape:
+            raise ValueError(
+                f"supergrid x shape {x_variable.shape}; "
+                f"expected {expected_supergrid_shape}"
+            )
+        if y_variable.shape != expected_supergrid_shape:
+            raise ValueError(
+                f"supergrid y shape {y_variable.shape}; "
+                f"expected {expected_supergrid_shape}"
+            )
+
+        latitude_t = read_array(y_variable[1::2, 1::2])
+        west_lon = read_array(x_variable[1::2, 0])
+        west_lat = read_array(y_variable[1::2, 0])
+        east_lon = read_array(x_variable[1::2, -1])
+        east_lat = read_array(y_variable[1::2, -1])
+        north_lon = read_array(x_variable[-1, 1::2])
+        north_lat = read_array(y_variable[-1, 1::2])
+
+    topology = GridTopology(
+        periodic_x=spherical_points_match(
+            west_lon,
+            west_lat,
+            east_lon,
+            east_lat,
+        ),
+        north_fold=spherical_points_match(
+            north_lon,
+            north_lat,
+            north_lon[::-1],
+            north_lat[::-1],
+        ),
+    )
+    if topology.north_fold and nx % 2 != 0:
+        raise ValueError("A folded northern boundary requires an even nx")
+    log(
+        "Grid topology: "
+        f"periodic_x={str(topology.periodic_x).lower()}, "
+        f"north_fold={str(topology.north_fold).lower()}"
+    )
+    return latitude_t, topology
 
 
 def rho_eos(temperature: np.ndarray, salinity: np.ndarray, z: float) -> np.ndarray:
@@ -431,8 +528,11 @@ def build_grid_metrics(
     )
 
 
-def make_face_masks(mask_t: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Create the same two-dimensional U/V masks as the MATLAB code."""
+def make_face_masks(
+    mask_t: np.ndarray,
+    topology: GridTopology,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Create native U/V masks including periodic and folded connections."""
 
     ny, nx = mask_t.shape
     umask = np.zeros((ny, nx + 1), dtype=np.float64)
@@ -441,10 +541,16 @@ def make_face_masks(mask_t: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     umask[:, 1:nx] = mask_t[:, : nx - 1] * mask_t[:, 1:nx]
     umask[:, 0] = mask_t[:, 0]
     umask[:, nx] = mask_t[:, nx - 1]
+    if topology.periodic_x:
+        seam_mask = mask_t[:, nx - 1] * mask_t[:, 0]
+        umask[:, 0] = seam_mask
+        umask[:, nx] = seam_mask
 
     vmask[1:ny, :] = mask_t[: ny - 1, :] * mask_t[1:ny, :]
     vmask[0, :] = mask_t[0, :]
     vmask[ny, :] = mask_t[ny - 1, :]
+    if topology.north_fold:
+        vmask[ny, :] = mask_t[ny - 1, :] * mask_t[ny - 1, ::-1]
 
     return umask, vmask
 
@@ -615,7 +721,10 @@ def thickness_to_faces(dz_t: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return dz_u, dz_v
 
 
-def face_depths(h_t: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def face_depths(
+    h_t: np.ndarray,
+    topology: GridTopology,
+) -> tuple[np.ndarray, np.ndarray]:
     """Interpolate total water-column thickness to U/V faces."""
 
     ny, nx = h_t.shape
@@ -625,24 +734,112 @@ def face_depths(h_t: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     he[:, 1:nx] = 0.5 * (h_t[:, : nx - 1] + h_t[:, 1:nx])
     he[:, 0] = h_t[:, 0]
     he[:, nx] = h_t[:, nx - 1]
+    if topology.periodic_x:
+        seam_depth = 0.5 * (h_t[:, nx - 1] + h_t[:, 0])
+        he[:, 0] = seam_depth
+        he[:, nx] = seam_depth
 
     hn[1:ny, :] = 0.5 * (h_t[: ny - 1, :] + h_t[1:ny, :])
     hn[0, :] = h_t[0, :]
     hn[ny, :] = h_t[ny - 1, :]
+    if topology.north_fold:
+        hn[ny, :] = 0.5 * (h_t[ny - 1, :] + h_t[ny - 1, ::-1])
     return he, hn
+
+
+def transport_flux_divergence(
+    hu: np.ndarray,
+    hv: np.ndarray,
+    metrics: GridMetrics,
+    topology: GridTopology,
+) -> np.ndarray:
+    """Return tracer-cell transport-flux divergence with grid connections."""
+
+    flux_u = hu * metrics.dy_u
+    flux_v = hv * metrics.dx_v
+
+    if topology.periodic_x:
+        seam_flux = 0.5 * (flux_u[:, 0] + flux_u[:, -1])
+        flux_u[:, 0] = seam_flux
+        flux_u[:, -1] = seam_flux
+
+    if topology.north_fold:
+        north_flux = flux_v[-1, :]
+        flux_v[-1, :] = 0.5 * (north_flux - north_flux[::-1])
+
+    return (
+        flux_u[:, 1:] - flux_u[:, :-1]
+        + flux_v[1:, :] - flux_v[:-1, :]
+    )
+
+
+def barotropic_correction_velocity(
+    chi_t: np.ndarray,
+    umask: np.ndarray,
+    vmask: np.ndarray,
+    metrics: GridMetrics,
+    topology: GridTopology,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Evaluate the potential gradient on native U/V faces."""
+
+    ny, nx = chi_t.shape
+    uc = np.zeros((ny, nx + 1), dtype=np.float64)
+    vc = np.zeros((ny + 1, nx), dtype=np.float64)
+
+    valid_u = umask[:, 1:nx] != 0.0
+    np.divide(
+        chi_t[:, 1:nx] - chi_t[:, : nx - 1],
+        metrics.dx_u[:, 1:nx],
+        out=uc[:, 1:nx],
+        where=valid_u,
+    )
+    if topology.periodic_x:
+        seam_distance = metrics.dx_u[:, nx] + metrics.dx_u[:, 0]
+        seam_velocity = np.zeros(ny, dtype=np.float64)
+        np.divide(
+            chi_t[:, 0] - chi_t[:, nx - 1],
+            seam_distance,
+            out=seam_velocity,
+            where=umask[:, 0] != 0.0,
+        )
+        uc[:, 0] = seam_velocity
+        uc[:, nx] = seam_velocity
+
+    valid_v = vmask[1:ny, :] != 0.0
+    np.divide(
+        chi_t[1:ny, :] - chi_t[: ny - 1, :],
+        metrics.dy_v[1:ny, :],
+        out=vc[1:ny, :],
+        where=valid_v,
+    )
+    if topology.north_fold:
+        partners = np.arange(nx - 1, -1, -1)
+        fold_distance = (
+            metrics.dy_v[ny, :] + metrics.dy_v[ny, partners]
+        )
+        np.divide(
+            chi_t[ny - 1, partners] - chi_t[ny - 1, :],
+            fold_distance,
+            out=vc[ny, :],
+            where=vmask[ny, :] != 0.0,
+        )
+
+    if np.any(~np.isfinite(uc)) or np.any(~np.isfinite(vc)):
+        raise FloatingPointError("Non-finite barotropic velocity correction")
+    return uc, vc
 
 
 def build_poisson_matrix(
     h_t: np.ndarray,
     mask_eff: np.ndarray,
-    area: np.ndarray,
     metrics: GridMetrics,
+    topology: GridTopology,
 ) -> tuple[csr_matrix, np.ndarray, np.ndarray]:
-    """Vectorized construction of the MATLAB five-point sparse operator."""
+    """Build a symmetric flux-form Poisson operator on wet tracer cells."""
 
     start = perf_counter()
     ny, nx = h_t.shape
-    he, hn = face_depths(h_t)
+    he, hn = face_depths(h_t, topology)
 
     wet_flat = np.flatnonzero(mask_eff.ravel(order="C"))
     nw = wet_flat.size
@@ -661,68 +858,97 @@ def build_poisson_matrix(
     diagonal = np.zeros(nw, dtype=np.float64)
     pointer = 0
 
-    def append_direction(
-        source: np.ndarray,
-        neighbor: np.ndarray,
+    def append_edges(
+        first: np.ndarray,
+        second: np.ndarray,
         coefficient: np.ndarray,
     ) -> None:
         nonlocal pointer
-        count = source.size
-        rows[pointer : pointer + count] = source
-        cols[pointer : pointer + count] = neighbor
+        count = first.size
+        if count == 0:
+            return
+        if not np.all(np.isfinite(coefficient) & (coefficient > 0.0)):
+            raise ValueError("Poisson edge coefficients must be finite and positive")
+        if pointer + 2 * count > rows.size:
+            raise RuntimeError("Poisson sparse-array allocation was exceeded")
+
+        rows[pointer : pointer + count] = first
+        cols[pointer : pointer + count] = second
         vals[pointer : pointer + count] = -coefficient
-        diagonal[source] += coefficient
         pointer += count
 
-    # East: cell (y, x) to (y, x+1).
+        rows[pointer : pointer + count] = second
+        cols[pointer : pointer + count] = first
+        vals[pointer : pointer + count] = -coefficient
+        pointer += count
+
+        diagonal[first] += coefficient
+        diagonal[second] += coefficient
+
+    # Internal east-west faces.
     valid = mask_eff[:, : nx - 1] & mask_eff[:, 1:nx]
     coefficient = (
         he[:, 1:nx]
         * metrics.dy_u[:, 1:nx]
-        / (metrics.dx_u[:, 1:nx] * area[:, : nx - 1])
+        / metrics.dx_u[:, 1:nx]
     )
-    append_direction(
+    append_edges(
         index_map[:, : nx - 1][valid],
         index_map[:, 1:nx][valid],
         coefficient[valid],
     )
 
-    # West: cell (y, x) to (y, x-1).
-    coefficient = (
-        he[:, 1:nx]
-        * metrics.dy_u[:, 1:nx]
-        / (metrics.dx_u[:, 1:nx] * area[:, 1:nx])
-    )
-    append_direction(
-        index_map[:, 1:nx][valid],
-        index_map[:, : nx - 1][valid],
-        coefficient[valid],
-    )
+    # Periodic face between the last and first tracer columns.
+    if topology.periodic_x:
+        valid = mask_eff[:, nx - 1] & mask_eff[:, 0]
+        seam_depth = 0.5 * (h_t[:, nx - 1] + h_t[:, 0])
+        seam_length = 0.5 * (
+            metrics.dy_u[:, nx] + metrics.dy_u[:, 0]
+        )
+        seam_distance = metrics.dx_u[:, nx] + metrics.dx_u[:, 0]
+        coefficient = seam_depth * seam_length / seam_distance
+        append_edges(
+            index_map[:, nx - 1][valid],
+            index_map[:, 0][valid],
+            coefficient[valid],
+        )
 
-    # North: cell (y, x) to (y+1, x).
+    # Internal north-south faces.
     valid = mask_eff[: ny - 1, :] & mask_eff[1:ny, :]
     coefficient = (
         hn[1:ny, :]
         * metrics.dx_v[1:ny, :]
-        / (metrics.dy_v[1:ny, :] * area[: ny - 1, :])
+        / metrics.dy_v[1:ny, :]
     )
-    append_direction(
+    append_edges(
         index_map[: ny - 1, :][valid],
         index_map[1:ny, :][valid],
         coefficient[valid],
     )
 
-    # South: cell (y, x) to (y-1, x).
-    coefficient = (
-        hn[1:ny, :]
-        * metrics.dx_v[1:ny, :]
-        / (metrics.dy_v[1:ny, :] * area[1:ny, :])
-    )
-    append_direction(
-        index_map[1:ny, :][valid],
-        index_map[: ny - 1, :][valid],
-        coefficient[valid],
-    )
+    # Folded northern boundary: pair top-row cells in reverse x order.
+    if topology.north_fold:
+        columns = np.arange(nx, dtype=np.int32)
+        partners = columns[::-1]
+        selected = columns < partners
+        columns = columns[selected]
+        partners = partners[selected]
+        valid = mask_eff[ny - 1, columns] & mask_eff[ny - 1, partners]
+        fold_depth = 0.5 * (
+            h_t[ny - 1, columns] + h_t[ny - 1, partners]
+        )
+        fold_length = 0.5 * (
+            metrics.dx_v[ny, columns] + metrics.dx_v[ny, partners]
+        )
+        fold_distance = (
+            metrics.dy_v[ny, columns] + metrics.dy_v[ny, partners]
+        )
+        coefficient = fold_depth * fold_length / fold_distance
+        append_edges(
+            index_map[ny - 1, columns][valid],
+            index_map[ny - 1, partners][valid],
+            coefficient[valid],
+        )
 
     diagonal_indices = np.arange(nw, dtype=np.int32)
     rows[pointer : pointer + nw] = diagonal_indices
@@ -735,6 +961,7 @@ def build_poisson_matrix(
         shape=(nw, nw),
     ).tocsr()
     matrix.sum_duplicates()
+    matrix.eliminate_zeros()
 
     elapsed("build Poisson matrix", start)
     log(
@@ -743,16 +970,95 @@ def build_poisson_matrix(
     return matrix, wet_flat, diagonal
 
 
+def prepare_poisson_system(
+    matrix: csr_matrix,
+    diagonal: np.ndarray,
+    rhs_flux: np.ndarray,
+    cell_area: np.ndarray,
+) -> tuple[csr_matrix, np.ndarray, int]:
+    """Enforce component compatibility and fix one gauge per component."""
+
+    component_count, labels = connected_components(
+        matrix,
+        directed=False,
+        return_labels=True,
+    )
+    component_area = np.bincount(labels, weights=cell_area)
+    component_flux = np.bincount(labels, weights=rhs_flux)
+    if np.any(~np.isfinite(component_area) | (component_area <= 0.0)):
+        raise ValueError("Poisson components must have finite positive area")
+
+    component_mean_divergence = component_flux / component_area
+    compatible_rhs = (
+        rhs_flux - component_mean_divergence[labels] * cell_area
+    )
+    remaining_component_flux = np.bincount(
+        labels,
+        weights=compatible_rhs,
+    )
+    compatibility_scale = max(
+        np.linalg.norm(rhs_flux),
+        np.finfo(float).eps,
+    )
+    compatibility_error = (
+        np.linalg.norm(remaining_component_flux) / compatibility_scale
+    )
+    if compatibility_error > 1.0e-12:
+        raise RuntimeError(
+            "Failed to enforce Poisson component compatibility: "
+            f"relative error={compatibility_error:.6e}"
+        )
+
+    _, anchors = np.unique(labels, return_index=True)
+    gauge_values = diagonal[anchors].copy()
+    gauge_values[gauge_values <= 0.0] = 1.0
+    gauge_matrix = csr_matrix(
+        (gauge_values, (anchors, anchors)),
+        shape=matrix.shape,
+    )
+    solver_matrix = (matrix + gauge_matrix).tocsr()
+
+    component_sizes = np.bincount(labels)
+    log(
+        "Poisson components: "
+        f"count={component_count}, "
+        f"largest={int(np.max(component_sizes))}, "
+        f"isolated={int(np.count_nonzero(component_sizes == 1))}"
+    )
+    log(
+        "Compatibility adjustment: "
+        f"max_abs_mean_divergence="
+        f"{np.max(np.abs(component_mean_divergence)):.6e} m s-1"
+    )
+    return solver_matrix, compatible_rhs, component_count
+
+
 def solve_poisson(
     matrix: csr_matrix,
     rhs: np.ndarray,
     rtol: float,
     maxiter: int,
 ) -> tuple[np.ndarray, int, int, float]:
-    """Solve with the same unpreconditioned conjugate-gradient method."""
+    """Solve the symmetric gauge-fixed system with Jacobi-preconditioned CG."""
 
     start = perf_counter()
     iterations = 0
+
+    rhs_norm = np.linalg.norm(rhs)
+    if rhs_norm <= np.finfo(float).eps:
+        log("cg: zero compatible RHS; no correction is required")
+        elapsed("Poisson CG solve", start)
+        return np.zeros_like(rhs), 0, 0, 0.0
+
+    diagonal = matrix.diagonal()
+    if np.any(~np.isfinite(diagonal) | (diagonal <= 0.0)):
+        raise ValueError("Gauge-fixed Poisson diagonal must be positive")
+    preconditioner = LinearOperator(
+        matrix.shape,
+        matvec=lambda values: values / diagonal,
+        rmatvec=lambda values: values / diagonal,
+        dtype=np.float64,
+    )
 
     def count_iteration(_: np.ndarray) -> None:
         nonlocal iterations
@@ -765,10 +1071,11 @@ def solve_poisson(
         rtol=rtol,
         atol=0.0,
         maxiter=maxiter,
+        M=preconditioner,
         callback=count_iteration,
     )
     residual = np.linalg.norm(matrix @ solution - rhs)
-    relative_residual = residual / max(np.linalg.norm(rhs), np.finfo(float).eps)
+    relative_residual = residual / rhs_norm
 
     log(
         "cg: "
@@ -1264,12 +1571,12 @@ def reconstruct(
     mask_t = ocean_t.astype(np.float64)
 
     metrics = build_grid_metrics(hgrid_path, ny=ny, nx=nx)
-    umask, vmask = make_face_masks(mask_t)
-
-    with Dataset(hgrid_path, "r") as hgrid:
-        latitude_t = read_array(
-            hgrid.variables["y"][1::2, 1::2]
-        )
+    latitude_t, topology = read_tracer_latitude_and_topology(
+        hgrid_path,
+        ny=ny,
+        nx=nx,
+    )
+    umask, vmask = make_face_masks(mask_t, topology)
     if latitude_t.shape != expected_shape:
         raise ValueError(
             f"tracer latitude shape {latitude_t.shape}; "
@@ -1471,62 +1778,108 @@ def reconstruct(
         hv *= vmask
         h_t[h_t < 0.0] = 0.0
 
-        fx_w = hu[:, :nx] * metrics.dy_u[:, :nx]
-        fx_e = hu[:, 1 : nx + 1] * metrics.dy_u[:, 1 : nx + 1]
-        fy_s = hv[:ny, :] * metrics.dx_v[:ny, :]
-        fy_n = hv[1 : ny + 1, :] * metrics.dx_v[1 : ny + 1, :]
-        rhs_t = (fx_e - fx_w + fy_n - fy_s) / area
-        rhs_t *= mask_t
-
         mask_eff = ocean_t & (h_t > 0.0)
-        matrix, wet_flat, _ = build_poisson_matrix(
-            h_t,
-            mask_eff,
-            area,
+        if np.any(
+            mask_eff
+            & (~np.isfinite(area) | (area <= 0.0))
+        ):
+            raise ValueError("Wet tracer-cell areas must be finite and positive")
+
+        raw_flux_divergence = transport_flux_divergence(
+            hu,
+            hv,
             metrics,
+            topology,
         )
-        rhs = rhs_t.ravel(order="C")[wet_flat].copy()
-        rhs -= np.mean(rhs)
+        if np.any(mask_eff & ~np.isfinite(raw_flux_divergence)):
+            raise FloatingPointError(
+                "Non-finite depth-integrated flux divergence"
+            )
+        rhs_t = np.zeros((ny, nx), dtype=np.float64)
+        np.divide(
+            raw_flux_divergence,
+            area,
+            out=rhs_t,
+            where=mask_eff,
+        )
+
+        wet_flat = np.flatnonzero(mask_eff.ravel(order="C"))
+        rhs_raw_flux = raw_flux_divergence.ravel(order="C")[wet_flat]
+        area_wet = area.ravel(order="C")[wet_flat]
+        chi_vector = np.zeros(wet_flat.size, dtype=np.float64)
+        matrix: csr_matrix | None = None
+        matrix_nonzeros = 0
+        info, iterations, relative_residual = 0, 0, 0.0
+
         if apply_barotropic_correction:
-            chi_vector, info, iterations, relative_residual = solve_poisson(
+            matrix, matrix_wet_flat, diagonal = build_poisson_matrix(
+                h_t,
+                mask_eff,
+                metrics,
+                topology,
+            )
+            if not np.array_equal(matrix_wet_flat, wet_flat):
+                raise RuntimeError("Poisson wet-point indexing changed unexpectedly")
+            solver_matrix, rhs, _ = prepare_poisson_system(
                 matrix,
+                diagonal,
+                rhs_raw_flux,
+                area_wet,
+            )
+            chi_vector, info, iterations, relative_residual = solve_poisson(
+                solver_matrix,
                 rhs,
                 rtol=cg_rtol,
                 maxiter=cg_maxiter,
             )
-            if info != 0 and require_convergence:
+            residual_limit = (
+                cg_rtol if require_convergence else 10.0 * cg_rtol
+            )
+            if (
+                info != 0
+                or not np.isfinite(relative_residual)
+                or relative_residual > residual_limit
+            ):
                 raise RuntimeError(
                     "Conjugate-gradient solver did not converge: "
                     f"info={info}, "
                     f"relative_residual={relative_residual:.6e}"
                 )
-            if info != 0:
-                log(
-                    "[WARNING] CG did not converge within the requested "
-                    "iterations. Continuing to match the MATLAB workflow, "
-                    "which also writes the current iterate when pcg flag != 0."
-                )
+            matrix_nonzeros = int(matrix.nnz)
         else:
-            log("[INFO] Skipping barotropic correction.")
-            chi_vector = np.zeros(wet_flat.size, dtype=np.float64)
-            info, iterations, relative_residual = 0, 0, 1.0
+            log("[INFO] Skipping barotropic correction and Poisson matrix.")
 
         chi_t = np.zeros((ny, nx), dtype=np.float64)
         chi_t.ravel(order="C")[wet_flat] = chi_vector
-
-        dchi_u = np.zeros((ny, nx + 1), dtype=np.float64)
-        dchi_v = np.zeros((ny + 1, nx), dtype=np.float64)
-        dchi_u[:, 1:nx] = (
-            chi_t[:, 1:nx] - chi_t[:, : nx - 1]
-        ) * umask[:, 1:nx]
-        dchi_v[1:ny, :] = (
-            chi_t[1:ny, :] - chi_t[: ny - 1, :]
-        ) * vmask[1:ny, :]
-
-        uc = (dchi_u / metrics.dx_u) * umask
-        vc = (dchi_v / metrics.dy_v) * vmask
-        uc[~np.isfinite(uc)] = 0.0
-        vc[~np.isfinite(vc)] = 0.0
+        uc, vc = barotropic_correction_velocity(
+            chi_t,
+            umask,
+            vmask,
+            metrics,
+            topology,
+        )
+        if apply_barotropic_correction:
+            correction_u_values = uc[umask != 0.0]
+            correction_v_values = vc[vmask != 0.0]
+            correction_count = (
+                correction_u_values.size + correction_v_values.size
+            )
+            correction_maximum = max(
+                np.max(np.abs(correction_u_values), initial=0.0),
+                np.max(np.abs(correction_v_values), initial=0.0),
+            )
+            correction_rms = math.sqrt(
+                (
+                    np.dot(correction_u_values, correction_u_values)
+                    + np.dot(correction_v_values, correction_v_values)
+                )
+                / max(correction_count, 1)
+            )
+            log(
+                "Barotropic velocity correction: "
+                f"max_abs={correction_maximum:.6e} m s-1, "
+                f"rms={correction_rms:.6e} m s-1"
+            )
 
         second_pass_start = perf_counter()
         with Dataset(partial_path, "r+") as destination:
@@ -1549,27 +1902,37 @@ def reconstruct(
         if apply_barotropic_correction:
             elapsed("apply/write barotropic correction", second_pass_start)
 
-        he, hn = face_depths(h_t)
-        hu_new = hu + he * dchi_u / metrics.dx_u
-        hv_new = hv + hn * dchi_v / metrics.dy_v
+        he, hn = face_depths(h_t, topology)
+        hu_new = hu + he * uc
+        hv_new = hv + hn * vc
+        corrected_flux_divergence = transport_flux_divergence(
+            hu_new,
+            hv_new,
+            metrics,
+            topology,
+        )
+        divergence_after = np.zeros((ny, nx), dtype=np.float64)
+        np.divide(
+            corrected_flux_divergence,
+            area,
+            out=divergence_after,
+            where=mask_eff,
+        )
 
-        fx_w_new = hu_new[:, :nx] * metrics.dy_u[:, :nx]
-        fx_e_new = hu_new[:, 1 : nx + 1] * metrics.dy_u[:, 1 : nx + 1]
-        fy_s_new = hv_new[:ny, :] * metrics.dx_v[:ny, :]
-        fy_n_new = hv_new[1 : ny + 1, :] * metrics.dx_v[1 : ny + 1, :]
-        divergence_after = (
-            fx_e_new - fx_w_new + fy_n_new - fy_s_new
-        ) / area
-        divergence_after *= mask_eff
-
-        achi = matrix @ chi_vector
+        achi = (
+            matrix @ chi_vector
+            if matrix is not None
+            else np.zeros_like(rhs_raw_flux)
+        )
         divergence_theory = np.zeros((ny, nx), dtype=np.float64)
-        divergence_theory.ravel(order="C")[wet_flat] = rhs - achi
+        divergence_theory.ravel(order="C")[wet_flat] = (
+            rhs_raw_flux - achi
+        ) / area_wet
 
         before_std = float(np.std(rhs_t[mask_eff], ddof=0))
         theory_std = float(np.std(divergence_theory[mask_eff], ddof=0))
         after_std = float(np.std(divergence_after[mask_eff], ddof=0))
-        ratio = after_std / before_std
+        ratio = after_std / max(before_std, np.finfo(float).eps)
         log(
             "RMS: "
             f"before={before_std:.6e} "
@@ -1589,7 +1952,7 @@ def reconstruct(
 
         solver_diagnostics = SolverDiagnostics(
             wet_points=int(wet_flat.size),
-            nonzeros=int(matrix.nnz),
+            nonzeros=matrix_nonzeros,
             iterations=iterations,
             info=int(info),
             relative_residual=relative_residual,
@@ -1651,8 +2014,8 @@ def parse_arguments() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(
         description=(
-            "Reconstruct MOM6 geostrophic currents using the same numerical "
-            "logic as geostrophic_adj/reconstruction_current.m"
+            "Reconstruct MOM6 geostrophic currents and optionally apply a "
+            "barotropic transport projection"
         )
     )
     parser.add_argument("--input", required=True, type=Path)
@@ -1691,7 +2054,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--require-convergence",
         action="store_true",
-        help="Fail instead of matching MATLAB when CG reaches maxiter",
+        help="Require the recomputed CG residual to meet --cg-rtol exactly",
     )
     parser.add_argument(
         "--skip-barotropic-correction",
