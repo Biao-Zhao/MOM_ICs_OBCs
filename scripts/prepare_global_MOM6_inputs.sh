@@ -4,7 +4,7 @@
 #                                  --------- 2025.10.04 -------                                        #
 #                                                                                                      #
 # Purpose:                                                                                             #
-#   Download CMEMS ocean reanalysis data for preparing initial condition for MOM6 model.               #
+#   Download CMEMS ocean reanalysis data for preparing initial condition for global MOM6 model.        #
 #                                                                                                      #
 #                                                                                                      #
 # Usage:                                                                                               #
