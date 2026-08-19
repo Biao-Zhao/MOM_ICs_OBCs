@@ -31,6 +31,7 @@ from depths import vgrid_to_layers
 
 
 _KARA_SOURCE_PLANES = None
+TEMP_SALT_VALIDITY_VERSION = "surface_bfill_v1"
 
 
 def _flood_kara_plane(index):
@@ -382,19 +383,32 @@ def write_initial(config):
                     existing_mask.shape == expected_shape
                     and "zl" in existing.coords
                     and np.allclose(existing["zl"].values, zl_values)
+                    and existing_mask.attrs.get("mask_version")
+                    == TEMP_SALT_VALIDITY_VERSION
                 )
         except (KeyError, OSError, ValueError):
             reuse_validity = False
     make_validity = not reuse_validity
     if make_validity:
-        print("Creating pre-fill validity mask:", validity_file)
+        print("Creating density-gradient validity mask:", validity_file)
         phase = perf_counter()
-        temp_valid = ds_temp.assign_coords(time=output_time).interp(
-            depth=ztarget
-        ).notnull()
-        salt_valid = ds_sal.assign_coords(time=output_time).interp(
-            depth=ztarget
-        ).notnull()
+        # Treat the thin target layers above the shallowest source level as
+        # reliable: they inherit the first vertically valid source value and
+        # introduce no new horizontal structure.  Do not ffill here, so
+        # bottom extrapolation and horizontal flooding remain excluded from
+        # density-gradient calculations.
+        temp_valid = (
+            ds_temp.assign_coords(time=output_time)
+            .interp(depth=ztarget)
+            .bfill("zl")
+            .notnull()
+        )
+        salt_valid = (
+            ds_sal.assign_coords(time=output_time)
+            .interp(depth=ztarget)
+            .bfill("zl")
+            .notnull()
+        )
         valid_fraction = glorys_to_t(
             (temp_valid & salt_valid).astype(np.float32)
         )
@@ -404,10 +418,17 @@ def write_initial(config):
         temp_salt_valid = temp_salt_valid.astype(np.uint8)
         temp_salt_valid.name = "temp_salt_valid"
         temp_salt_valid.attrs = {
-            "long_name": "Temperature and salinity valid before filling",
+            "long_name": (
+                "Temperature and salinity reliable for horizontal "
+                "density gradients"
+            ),
             "flag_values": np.array([0, 1], dtype=np.uint8),
-            "flag_meanings": "filled original",
+            "flag_meanings": "excluded_from_gradient valid_for_gradient",
             "valid_fraction_threshold": np.float32(0.999),
+            "mask_version": TEMP_SALT_VALIDITY_VERSION,
+            "vertical_fill_policy": (
+                "surface bfill allowed; bottom ffill excluded"
+            ),
         }
         validity_partial = validity_file + ".partial"
         if os.path.exists(validity_partial):
