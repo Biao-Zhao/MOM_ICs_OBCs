@@ -256,6 +256,27 @@ def write_initial(config):
     glorys["time"] = (("time",), ds_temp["time"].dt.floor("1d").data)
 
     target_grid = xarray.open_dataset(grid_file)
+    angle_variable = target_grid["angle_dx"]
+    angle_units = str(angle_variable.attrs.get("units", "")).lower()
+    if "degree" in angle_units:
+        print("Converting MOM6 angle_dx from degrees to radians")
+        angle_to_radians = np.pi / 180.0
+    elif "radian" in angle_units:
+        angle_to_radians = 1.0
+    else:
+        maximum_angle = float(
+            np.abs(angle_variable).max(skipna=True).values
+        )
+        if not np.isfinite(maximum_angle) or maximum_angle > 2.0 * np.pi:
+            raise ValueError(
+                "MOM6 angle_dx units are missing or unsupported, and its "
+                "values are not consistent with radians"
+            )
+        print(
+            "[WARNING] MOM6 angle_dx units are not specified; "
+            "assuming radians"
+        )
+        angle_to_radians = 1.0
 
     # Tracer points: odd/odd locations on the MOM6 supergrid.
     target_t = (
@@ -274,7 +295,8 @@ def write_initial(config):
     )
     angle_u = target_u_native["angle_dx"].rename(
         {"nxp": "xq", "nyp": "yh"}
-    )
+    ) * angle_to_radians
+    angle_u.attrs["units"] = "radians"
 
     # V points: odd/even locations on the MOM6 supergrid.
     target_v_native = target_grid[["x", "y", "angle_dx"]].isel(
@@ -286,7 +308,8 @@ def write_initial(config):
     )
     angle_v = target_v_native["angle_dx"].rename(
         {"nxp": "xh", "nyp": "yq"}
-    )
+    ) * angle_to_radians
+    angle_v.attrs["units"] = "radians"
 
     print("Tracer target dimensions:", target_t.dims)
     print("U target dimensions:", target_u.dims)
