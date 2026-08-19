@@ -310,6 +310,9 @@ For a regional configuration:
 Examples:
 
 ```bash
+# Download cropped Global Ocean Physics Analysis and Forecast data
+./prepare_regional_MOM6_inputs.sh 2022-11-28 12 2022-12-01 1
+
 # Generate one initial condition
 ./prepare_regional_MOM6_inputs.sh 2022-11-28 12 2022-11-28 2
 
@@ -326,7 +329,18 @@ Therefore, only `MODE=1`, `MODE=2`, and `MODE=4` or `MODE=all` are needed:
 ```bash
 ./prepare_global_MOM6_inputs.sh START_DATE START_HOUR END_DATE MODE
 ```
+Examples:
 
+```bash
+# Download Global Ocean Physics Analysis and Forecast data
+./prepare_global_MOM6_inputs.sh 2022-11-28 12 2022-12-01 1
+
+# Generate one initial condition
+./prepare_global_MOM6_inputs.sh 2022-11-28 12 2022-11-28 2
+
+# Reconstruct geostrophic currents for an existing initial condition
+./prepare_global_MOM6_inputs.sh 2022-11-28 12 2022-11-28 4
+```
 ## Grid and source data
 
 The **grid** directory for each resolution should contain:
