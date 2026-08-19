@@ -41,7 +41,7 @@ START_HOUR="12"
 TIME_SLOTS=("00" "06" "12" "18")
 
 #grid cases
-res="C768"
+res="OM5"
 
 #vertical levels
 NK="75"
