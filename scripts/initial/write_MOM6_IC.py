@@ -123,6 +123,8 @@ def make_regridder(source, target, filename, reuse_weights, periodic):
 
     Direct U/V regridding uses new weight filenames, so the first run creates
     them even when reuse_weights is True. Subsequent runs reuse them.
+    Bilinear interpolation is retained inside the source domain; destination
+    points outside it use the nearest source point.
     """
     reuse_this_file = bool(reuse_weights and os.path.exists(filename))
     action = "Reusing" if reuse_this_file else "Generating"
@@ -135,6 +137,7 @@ def make_regridder(source, target, filename, reuse_weights, periodic):
         filename=filename,
         reuse_weights=reuse_this_file,
         periodic=periodic,
+        extrap_method="nearest_s2d",
     )
 
 
