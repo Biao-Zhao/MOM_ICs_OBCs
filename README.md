@@ -98,8 +98,9 @@ hours.
 
 From a practical forecasting perspective, when the ocean model is initialized from an external dataset, it is preferable to initialize the model from a dynamically balanced state to reduce the initialization shock. Otherwise, during the initial adjustment period, spurious gravity waves can cause the flow field to exhibit artificial oscillations. To mitigate this initialization shock, the geostrophic-adjustment module reconstructs the velocity field from the remapped mass fields and applies a depth-independent correction to reduce transport divergence on the target MOM6 grid.
 
-Two versions of the code (MATLAB and Python) are provided. They follow the same physical and
-numerical procedure and produce nearly identical adjusted currents.
+The Python implementation is actively maintained and is used by the current
+workflow. The MATLAB implementation is retained temporarily as a reference
+and will be gradually deprecated.
 
 ### Numerical procedure
 
@@ -200,10 +201,26 @@ numerical procedure and produce nearly identical adjusted currents.
    \end{aligned}
    ```
 
-   For C9600, the barotropic correction currently takes about 20 minutes and
-   is the most expensive part of the geostrophic adjustment. This optional
-   step, the transport-divergence correction, can be optimized further or
-   disabled.
+   The Python implementation solves the symmetric finite-volume Poisson
+   system with conjugate gradients preconditioned by a PyAMG multigrid
+   V-cycle. Install PyAMG in the active Conda environment with:
+
+   ```bash
+   conda install -c conda-forge pyamg
+   ```
+
+   The transport-divergence correction is optional. Before running `MODE=4`,
+   set the following option in `prepare_regional_MOM6_inputs.sh` or
+   `prepare_global_MOM6_inputs.sh`:
+
+   ```bash
+   APPLY_BAROTROPIC_CORRECTION="true"   # Apply the correction
+   APPLY_BAROTROPIC_CORRECTION="false"  # Skip the correction
+   ```
+
+   PyAMG is required only when this option is `"true"`. The adjusted NetCDF
+   file is published only after the iterative solver converges and the
+   applied correction is verified against the Poisson operator.
 
 ### Example results
 
