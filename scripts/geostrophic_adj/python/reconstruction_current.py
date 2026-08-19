@@ -164,8 +164,12 @@ class PlotDiagnostics:
 
     lon: np.ndarray
     lat: np.ndarray
+    map_lon: np.ndarray
+    map_lat: np.ndarray
+    map_angle: np.ndarray
     z: np.ndarray
     plot_level: int
+    apply_barotropic_correction: bool
     mask_t: np.ndarray
     original_u_surface: np.ndarray
     original_v_surface: np.ndarray
@@ -265,29 +269,39 @@ def spherical_points_match(
     )
 
 
-def read_tracer_latitude_and_topology(
+def read_tracer_geometry_and_topology(
     hgrid_path: Path,
     ny: int,
     nx: int,
-) -> tuple[np.ndarray, GridTopology]:
-    """Read tracer latitude and detect periodic/fold grid connections."""
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, GridTopology]:
+    """Read tracer geometry and detect periodic/fold grid connections."""
 
     with Dataset(hgrid_path, "r") as hgrid:
         x_variable = hgrid.variables["x"]
         y_variable = hgrid.variables["y"]
+        angle_variable = hgrid.variables["angle_dx"]
         expected_supergrid_shape = (2 * ny + 1, 2 * nx + 1)
-        if x_variable.shape != expected_supergrid_shape:
-            raise ValueError(
-                f"supergrid x shape {x_variable.shape}; "
-                f"expected {expected_supergrid_shape}"
-            )
-        if y_variable.shape != expected_supergrid_shape:
-            raise ValueError(
-                f"supergrid y shape {y_variable.shape}; "
-                f"expected {expected_supergrid_shape}"
-            )
+        for name, variable in (
+            ("x", x_variable),
+            ("y", y_variable),
+            ("angle_dx", angle_variable),
+        ):
+            if variable.shape != expected_supergrid_shape:
+                raise ValueError(
+                    f"supergrid {name} shape {variable.shape}; "
+                    f"expected {expected_supergrid_shape}"
+                )
 
+        longitude_t = read_array(x_variable[1::2, 1::2])
         latitude_t = read_array(y_variable[1::2, 1::2])
+        angle_t = read_array(angle_variable[1::2, 1::2])
+        angle_units = str(getattr(angle_variable, "units", "")).lower()
+        if "degree" in angle_units:
+            angle_t = np.deg2rad(angle_t)
+        elif np.nanmax(np.abs(angle_t)) > 2.0 * np.pi:
+            raise ValueError(
+                "angle_dx values exceed 2*pi but are not marked as degrees"
+            )
         west_lon = read_array(x_variable[1::2, 0])
         west_lat = read_array(y_variable[1::2, 0])
         east_lon = read_array(x_variable[1::2, -1])
@@ -316,7 +330,7 @@ def read_tracer_latitude_and_topology(
         f"periodic_x={str(topology.periodic_x).lower()}, "
         f"north_fold={str(topology.north_fold).lower()}"
     )
-    return latitude_t, topology
+    return longitude_t, latitude_t, angle_t, topology
 
 
 def rho_eos(temperature: np.ndarray, salinity: np.ndarray, z: float) -> np.ndarray:
@@ -1191,6 +1205,20 @@ def make_diagnostic_plots(
     def speed(u: np.ndarray, v: np.ndarray) -> np.ndarray:
         return np.sqrt(u * u + v * v)
 
+    def earth_relative_vectors(
+        u_model: np.ndarray,
+        v_model: np.ndarray,
+        angle: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Rotate model-grid vectors to true east/north for map arrows."""
+
+        cosine = np.cos(angle)
+        sine = np.sin(angle)
+        return (
+            cosine * u_model - sine * v_model,
+            sine * u_model + cosine * v_model,
+        )
+
     mask = data.mask_t != 0
 
     # Full C3200 maps contain more than two million cells per panel, and
@@ -1211,8 +1239,8 @@ def make_diagnostic_plots(
     map_x = slice(None, None, map_stride)
     quiver_y = slice(None, None, quiver_stride)
     quiver_x = slice(None, None, quiver_stride)
-    map_lon = data.lon[map_x]
-    map_lat = data.lat[map_y]
+    map_lon = data.map_lon[map_y, map_x]
+    map_lat = data.map_lat[map_y, map_x]
     map_mask = mask[map_y, map_x]
 
     # Calculate plotting quantities only at sampled points.  This avoids
@@ -1241,20 +1269,51 @@ def make_diagnostic_plots(
         ),
         np.nan,
     )
-    speed_difference = original_speed - geo_speed
+    difference_u = (
+        data.original_u_surface[map_y, map_x]
+        - data.geostrophic_u_surface[map_y, map_x]
+    )
+    difference_v = (
+        data.original_v_surface[map_y, map_x]
+        - data.geostrophic_v_surface[map_y, map_x]
+    )
+    vector_difference = np.where(
+        map_mask,
+        speed(difference_u, difference_v),
+        np.nan,
+    )
 
     log(
         "Diagnostic map sampling: "
         f"every {map_stride} grid point(s); "
         f"quiver every {quiver_stride} grid point(s)"
     )
+    valid_difference = vector_difference[np.isfinite(vector_difference)]
+    if valid_difference.size:
+        log(
+            "Sampled surface |original - geostrophic|: "
+            f"rms={np.sqrt(np.mean(valid_difference**2)):.6e}, "
+            f"p99={np.percentile(valid_difference, 99.0):.6e}, "
+            f"max={np.max(valid_difference):.6e} m s-1"
+        )
+
+    adjusted_title = (
+        "Adjusted speed"
+        if data.apply_barotropic_correction
+        else "Geostrophic speed (barotropic correction skipped)"
+    )
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 9), constrained_layout=True)
     surface_panels = (
         ("Original speed", original_speed, 0.0, 2.0),
         ("Geostrophic speed", geo_speed, 0.0, 2.0),
-        ("Original - geostrophic", speed_difference, -1.0, 1.0),
-        ("Adjusted speed", adjusted_speed, 0.0, 2.0),
+        (
+            "Original-geostrophic vector difference",
+            vector_difference,
+            0.0,
+            1.0,
+        ),
+        (adjusted_title, adjusted_speed, 0.0, 2.0),
     )
     for axis, (title, field, vmin, vmax) in zip(
         axes.flat,
@@ -1276,27 +1335,42 @@ def make_diagnostic_plots(
         axis.set_ylabel("Latitude")
         fig.colorbar(image, ax=axis, label="m s$^{-1}$")
 
-    axes[0, 0].quiver(
-        data.lon[quiver_x],
-        data.lat[quiver_y],
+    quiver_lon = data.map_lon[quiver_y, quiver_x]
+    quiver_lat = data.map_lat[quiver_y, quiver_x]
+    quiver_angle = data.map_angle[quiver_y, quiver_x]
+    original_quiver = earth_relative_vectors(
         data.original_u_surface[quiver_y, quiver_x],
         data.original_v_surface[quiver_y, quiver_x],
+        quiver_angle,
+    )
+    geostrophic_quiver = earth_relative_vectors(
+        data.geostrophic_u_surface[quiver_y, quiver_x],
+        data.geostrophic_v_surface[quiver_y, quiver_x],
+        quiver_angle,
+    )
+    adjusted_quiver = earth_relative_vectors(
+        data.adjusted_u_surface[quiver_y, quiver_x],
+        data.adjusted_v_surface[quiver_y, quiver_x],
+        quiver_angle,
+    )
+    axes[0, 0].quiver(
+        quiver_lon,
+        quiver_lat,
+        *original_quiver,
         color="k",
         scale=35,
     )
     axes[0, 1].quiver(
-        data.lon[quiver_x],
-        data.lat[quiver_y],
-        data.geostrophic_u_surface[quiver_y, quiver_x],
-        data.geostrophic_v_surface[quiver_y, quiver_x],
+        quiver_lon,
+        quiver_lat,
+        *geostrophic_quiver,
         color="k",
         scale=35,
     )
     axes[1, 1].quiver(
-        data.lon[quiver_x],
-        data.lat[quiver_y],
-        data.adjusted_u_surface[quiver_y, quiver_x],
-        data.adjusted_v_surface[quiver_y, quiver_x],
+        quiver_lon,
+        quiver_lat,
+        *adjusted_quiver,
         color="k",
         scale=35,
     )
@@ -1363,14 +1437,20 @@ def make_diagnostic_plots(
         cmap="RdYlBu_r",
     )
     axis.quiver(
-        data.lon[quiver_x],
-        data.lat[quiver_y],
-        data.correction_u_t[quiver_y, quiver_x],
-        data.correction_v_t[quiver_y, quiver_x],
+        quiver_lon,
+        quiver_lat,
+        *earth_relative_vectors(
+            data.correction_u_t[quiver_y, quiver_x],
+            data.correction_v_t[quiver_y, quiver_x],
+            quiver_angle,
+        ),
         color="k",
         scale=5,
     )
-    axis.set_title("Depth-independent velocity correction")
+    correction_title = "Depth-independent velocity correction"
+    if not data.apply_barotropic_correction:
+        correction_title += " (skipped)"
+    axis.set_title(correction_title)
     axis.set_xlabel("Longitude")
     axis.set_ylabel("Latitude")
     fig.colorbar(image, ax=axis, label="m s$^{-1}$")
@@ -1581,10 +1661,12 @@ def reconstruct(
     mask_t = ocean_t.astype(np.float64)
 
     metrics = build_grid_metrics(hgrid_path, ny=ny, nx=nx)
-    latitude_t, topology = read_tracer_latitude_and_topology(
-        hgrid_path,
-        ny=ny,
-        nx=nx,
+    longitude_t, latitude_t, angle_t, topology = (
+        read_tracer_geometry_and_topology(
+            hgrid_path,
+            ny=ny,
+            nx=nx,
+        )
     )
     umask, vmask = make_face_masks(mask_t, topology)
     if latitude_t.shape != expected_shape:
@@ -2023,8 +2105,12 @@ def reconstruct(
         plot_diagnostics = PlotDiagnostics(
             lon=lon,
             lat=lat,
+            map_lon=longitude_t,
+            map_lat=latitude_t,
+            map_angle=angle_t,
             z=z,
             plot_level=plot_level,
+            apply_barotropic_correction=apply_barotropic_correction,
             mask_t=mask_t,
             original_u_surface=original_u_surface,
             original_v_surface=original_v_surface,
