@@ -120,6 +120,7 @@ GRAVITY = 9.8
 OMEGA = 7.292115e-5
 EQUATORIAL_EXCLUSION_LATITUDE = 5.0
 TOPOLOGY_POINT_TOLERANCE = 1.0e-7
+BAROTROPIC_OPERATOR_TOLERANCE = 1.0e-10
 
 
 @dataclass
@@ -1788,6 +1789,17 @@ def reconstruct(
         h_t[h_t < 0.0] = 0.0
 
         mask_eff = ocean_t & (h_t > 0.0)
+        excluded_shallow_points = int(np.count_nonzero(ocean_t & ~mask_eff))
+        if excluded_shallow_points:
+            log(
+                "Barotropic correction excludes "
+                f"{excluded_shallow_points} wet mask/depth points with no "
+                "active vertical layer."
+            )
+        correction_umask, correction_vmask = make_face_masks(
+            mask_eff.astype(np.float64),
+            topology,
+        )
         if np.any(
             mask_eff
             & (~np.isfinite(area) | (area <= 0.0))
@@ -1862,14 +1874,14 @@ def reconstruct(
         chi_t.ravel(order="C")[wet_flat] = chi_vector
         uc, vc = barotropic_correction_velocity(
             chi_t,
-            umask,
-            vmask,
+            correction_umask,
+            correction_vmask,
             metrics,
             topology,
         )
         if apply_barotropic_correction:
-            correction_u_values = uc[umask != 0.0]
-            correction_v_values = vc[vmask != 0.0]
+            correction_u_values = uc[correction_umask != 0.0]
+            correction_v_values = vc[correction_vmask != 0.0]
             correction_count = (
                 correction_u_values.size + correction_v_values.size
             )
@@ -1889,6 +1901,49 @@ def reconstruct(
                 f"max_abs={correction_maximum:.6e} m s-1, "
                 f"rms={correction_rms:.6e} m s-1"
             )
+
+        he, hn = face_depths(h_t, topology)
+        achi = (
+            matrix @ chi_vector
+            if matrix is not None
+            else np.zeros_like(rhs_raw_flux)
+        )
+        if apply_barotropic_correction:
+            correction_flux_divergence = transport_flux_divergence(
+                he * uc,
+                hn * vc,
+                metrics,
+                topology,
+            )
+            actual_correction_flux = (
+                correction_flux_divergence.ravel(order="C")[wet_flat]
+            )
+            expected_correction_flux = -achi
+            operator_error = (
+                actual_correction_flux - expected_correction_flux
+            )
+            operator_error_scale = max(
+                np.linalg.norm(expected_correction_flux),
+                np.finfo(float).eps,
+            )
+            relative_operator_error = (
+                np.linalg.norm(operator_error) / operator_error_scale
+            )
+            log(
+                "Barotropic operator consistency: "
+                f"relative_error={relative_operator_error:.6e}, "
+                f"max_abs_error="
+                f"{np.max(np.abs(operator_error), initial=0.0):.6e} m3 s-1"
+            )
+            if (
+                not np.isfinite(relative_operator_error)
+                or relative_operator_error > BAROTROPIC_OPERATOR_TOLERANCE
+            ):
+                raise RuntimeError(
+                    "Barotropic correction does not match the Poisson "
+                    "operator; refusing to write adjusted currents: "
+                    f"relative_error={relative_operator_error:.6e}"
+                )
 
         second_pass_start = perf_counter()
         with Dataset(partial_path, "r+") as destination:
@@ -1911,7 +1966,6 @@ def reconstruct(
         if apply_barotropic_correction:
             elapsed("apply/write barotropic correction", second_pass_start)
 
-        he, hn = face_depths(h_t, topology)
         hu_new = hu + he * uc
         hv_new = hv + hn * vc
         corrected_flux_divergence = transport_flux_divergence(
@@ -1928,11 +1982,6 @@ def reconstruct(
             where=mask_eff,
         )
 
-        achi = (
-            matrix @ chi_vector
-            if matrix is not None
-            else np.zeros_like(rhs_raw_flux)
-        )
         divergence_theory = np.zeros((ny, nx), dtype=np.float64)
         divergence_theory.ravel(order="C")[wet_flat] = (
             rhs_raw_flux - achi
