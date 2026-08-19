@@ -5,16 +5,21 @@
 #                                                                                                      #
 # Purpose:                                                                                             #
 #   Download CMEMS ocean reanalysis data for preparing initial and open boundary conditions            #
-#   for MOM6 model.                                                                                    #
+#   for regional MOM6 model.                                                                           #
 #                                                                                                      #
 #                                                                                                      #
 # Usage:                                                                                               #
 #   Just edit the settings below, then run:                                                            #
-#       chmod +x prepare_MOM6_inputs.sh                                                                #
-#       ./prepare_MOM6_inputs.sh                                                                       #
+#       chmod +x prepare_regional_MOM6_inputs.sh                                                       #
+#   Dowload CMEMS data:                                                                                #
+#       ./prepare_regional_MOM6_inputs.sh 2022-11-28 12 2022-11-30 1                                   #
+#   Generate one initial condition                                                                     #
+#       ./prepare_regional_MOM6_inputs.sh 2022-11-28 12 2022-11-28 2                                   #
+#   Generate one open boundary condition                                                               #
+#       ./prepare_regional_MOM6_inputs.sh 2022-11-28 12 2022-11-30 3                                   #
+#   Reconstruct geostrophic currents for an existing initial condition                                 #
+#       ./prepare_regional_MOM6_inputs.sh 2022-11-28 12 2022-11-28 4                                   #
 #                                                                                                      #
-# Note:                                                                                                #
-#   - If region bounds are not set, global data will be downloaded by default.                         #
 ########################################################################################################
 source $HOME/miniconda3/etc/profile.d/conda.sh
 conda activate regrid
