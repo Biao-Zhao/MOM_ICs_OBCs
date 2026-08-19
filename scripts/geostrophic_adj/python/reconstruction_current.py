@@ -975,8 +975,8 @@ def prepare_poisson_system(
     diagonal: np.ndarray,
     rhs_flux: np.ndarray,
     cell_area: np.ndarray,
-) -> tuple[csr_matrix, np.ndarray, int]:
-    """Enforce component compatibility and fix one gauge per component."""
+) -> tuple[LinearOperator, np.ndarray, np.ndarray, int]:
+    """Enforce compatibility and constrain each component's mean potential."""
 
     component_count, labels = connected_components(
         matrix,
@@ -1009,16 +1009,36 @@ def prepare_poisson_system(
             f"relative error={compatibility_error:.6e}"
         )
 
-    _, anchors = np.unique(labels, return_index=True)
-    gauge_values = diagonal[anchors].copy()
-    gauge_values[gauge_values <= 0.0] = 1.0
-    gauge_matrix = csr_matrix(
-        (gauge_values, (anchors, anchors)),
-        shape=matrix.shape,
-    )
-    solver_matrix = (matrix + gauge_matrix).tocsr()
-
     component_sizes = np.bincount(labels)
+    component_diagonal = np.bincount(labels, weights=diagonal)
+    gauge_eigenvalues = component_diagonal / component_sizes
+    gauge_eigenvalues[gauge_eigenvalues <= 0.0] = 1.0
+    solver_diagonal = (
+        diagonal
+        + gauge_eigenvalues[labels] / component_sizes[labels]
+    )
+
+    def apply_component_mean_gauge(values: np.ndarray) -> np.ndarray:
+        component_means = (
+            np.bincount(
+                labels,
+                weights=values,
+                minlength=component_count,
+            )
+            / component_sizes
+        )
+        return (
+            matrix @ values
+            + gauge_eigenvalues[labels] * component_means[labels]
+        )
+
+    solver_operator = LinearOperator(
+        matrix.shape,
+        matvec=apply_component_mean_gauge,
+        rmatvec=apply_component_mean_gauge,
+        dtype=np.float64,
+    )
+
     log(
         "Poisson components: "
         f"count={component_count}, "
@@ -1030,11 +1050,18 @@ def prepare_poisson_system(
         f"max_abs_mean_divergence="
         f"{np.max(np.abs(component_mean_divergence)):.6e} m s-1"
     )
-    return solver_matrix, compatible_rhs, component_count
+    log("Poisson gauge: component-mean rank-one constraint")
+    return (
+        solver_operator,
+        compatible_rhs,
+        solver_diagonal,
+        component_count,
+    )
 
 
 def solve_poisson(
-    matrix: csr_matrix,
+    operator: csr_matrix | LinearOperator,
+    diagonal: np.ndarray,
     rhs: np.ndarray,
     rtol: float,
     maxiter: int,
@@ -1050,11 +1077,10 @@ def solve_poisson(
         elapsed("Poisson CG solve", start)
         return np.zeros_like(rhs), 0, 0, 0.0
 
-    diagonal = matrix.diagonal()
     if np.any(~np.isfinite(diagonal) | (diagonal <= 0.0)):
         raise ValueError("Gauge-fixed Poisson diagonal must be positive")
     preconditioner = LinearOperator(
-        matrix.shape,
+        operator.shape,
         matvec=lambda values: values / diagonal,
         rmatvec=lambda values: values / diagonal,
         dtype=np.float64,
@@ -1065,7 +1091,7 @@ def solve_poisson(
         iterations += 1
 
     solution, info = cg(
-        matrix,
+        operator,
         rhs,
         x0=None,
         rtol=rtol,
@@ -1074,7 +1100,7 @@ def solve_poisson(
         M=preconditioner,
         callback=count_iteration,
     )
-    residual = np.linalg.norm(matrix @ solution - rhs)
+    residual = np.linalg.norm(operator @ solution - rhs)
     relative_residual = residual / rhs_norm
 
     log(
@@ -1820,14 +1846,15 @@ def reconstruct(
             )
             if not np.array_equal(matrix_wet_flat, wet_flat):
                 raise RuntimeError("Poisson wet-point indexing changed unexpectedly")
-            solver_matrix, rhs, _ = prepare_poisson_system(
+            solver_operator, rhs, solver_diagonal, _ = prepare_poisson_system(
                 matrix,
                 diagonal,
                 rhs_raw_flux,
                 area_wet,
             )
             chi_vector, info, iterations, relative_residual = solve_poisson(
-                solver_matrix,
+                solver_operator,
+                solver_diagonal,
                 rhs,
                 rtol=cg_rtol,
                 maxiter=cg_maxiter,
