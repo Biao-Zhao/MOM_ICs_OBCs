@@ -31,7 +31,7 @@ from depths import vgrid_to_layers
 
 
 _KARA_SOURCE_PLANES = None
-TEMP_SALT_VALIDITY_VERSION = "surface_bfill_v1"
+TEMP_SALT_VALIDITY_VERSION = "surface_bfill_source_extent_v2"
 
 
 def _flood_kara_plane(index):
@@ -117,14 +117,20 @@ def report_time(label, start_time):
     return perf_counter()
 
 
+def extend_south_to_pole(data):
+    """Copy the southernmost source row to a temporary 90 S row."""
+    south_pole = data.isel(lat=0, drop=True).expand_dims(lat=[-90.0])
+    return xarray.concat((south_pole, data), dim="lat")
+
+
 def make_regridder(source, target, filename, reuse_weights, periodic):
     """
     Reuse a compatible weight file when requested and present.
 
     Direct U/V regridding uses new weight filenames, so the first run creates
     them even when reuse_weights is True. Subsequent runs reuse them.
-    Bilinear interpolation is retained inside the source domain; destination
-    points outside it use the nearest source point.
+    Global sources are extended before this function when the MOM6 grid
+    reaches south of the original source domain.
     """
     reuse_this_file = bool(reuse_weights and os.path.exists(filename))
     action = "Reusing" if reuse_this_file else "Generating"
@@ -137,7 +143,6 @@ def make_regridder(source, target, filename, reuse_weights, periodic):
         filename=filename,
         reuse_weights=reuse_this_file,
         periodic=periodic,
-        extrap_method="nearest_s2d",
     )
 
 
@@ -251,13 +256,6 @@ def write_initial(config):
         coords={"zl": z},
     )
 
-    glorys = xarray.merge([ds_temp, ds_sal, ds_ssh, ds_u, ds_v])
-    print("GLORYS dimensions:", glorys.dims)
-    print(f"Kara vertical-level workers: {kara_workers}")
-
-    # Keep the time treatment used by the original script.
-    glorys["time"] = (("time",), ds_temp["time"].dt.floor("1d").data)
-
     target_grid = xarray.open_dataset(grid_file)
     angle_variable = target_grid["angle_dx"]
     angle_units = str(angle_variable.attrs.get("units", "")).lower()
@@ -318,13 +316,50 @@ def write_initial(config):
     print("U target dimensions:", target_u.dims)
     print("V target dimensions:", target_v.dims)
 
+    source_latitudes = np.asarray(ds_temp["lat"].values, dtype=np.float64)
+    if not np.all(np.diff(source_latitudes) > 0.0):
+        raise ValueError("Expected source latitude to increase monotonically.")
+    source_south_lat = float(source_latitudes[0])
+    target_south_lat = min(
+        float(target["lat"].min(skipna=True).values)
+        for target in (target_t, target_u, target_v)
+    )
+    south_extended = False
+    if periodic_source and target_south_lat < source_south_lat:
+        if target_south_lat < -90.0 or source_south_lat <= -90.0:
+            raise ValueError(
+                "Cannot extend the global source far enough to cover the "
+                f"MOM6 grid: source minimum latitude={source_south_lat}, "
+                f"target minimum latitude={target_south_lat}"
+            )
+        print(
+            "Extending global GLORYS source southward from "
+            f"{source_south_lat:.2f} to -90.00 degrees by copying its "
+            "southernmost row"
+        )
+        ds_temp = extend_south_to_pole(ds_temp)
+        ds_sal = extend_south_to_pole(ds_sal)
+        ds_ssh = extend_south_to_pole(ds_ssh)
+        ds_u = extend_south_to_pole(ds_u)
+        ds_v = extend_south_to_pole(ds_v)
+        south_extended = True
+
+    glorys = xarray.merge([ds_temp, ds_sal, ds_ssh, ds_u, ds_v])
+    print("GLORYS dimensions used for remapping:", glorys.dims)
+    print(f"Kara vertical-level workers: {kara_workers}")
+
+    # Keep the time treatment used by the original script.
+    glorys["time"] = (("time",), ds_temp["time"].dt.floor("1d").data)
+
+    weight_variant = "_south_extended" if south_extended else ""
+
     phase_start = perf_counter()
     glorys_to_t = make_regridder(
         glorys,
         target_t,
         os.path.join(
         weight_dir,
-        f"regrid_glorys_{resolution}_tracers.nc",
+        f"regrid_glorys_{resolution}_tracers{weight_variant}.nc",
         ),
         reuse_weights,
         periodic_source,
@@ -334,7 +369,7 @@ def write_initial(config):
         target_u,
         os.path.join(
         weight_dir,
-        f"regrid_glorys_{resolution}_u.nc",
+        f"regrid_glorys_{resolution}_u{weight_variant}.nc",
         ),
         reuse_weights,
         periodic_source,
@@ -344,7 +379,7 @@ def write_initial(config):
         target_v,
         os.path.join(
         weight_dir,
-        f"regrid_glorys_{resolution}_v.nc",
+        f"regrid_glorys_{resolution}_v{weight_variant}.nc",
         ),
         reuse_weights,
         periodic_source,
@@ -439,6 +474,13 @@ def write_initial(config):
             (temp_valid & salt_valid).astype(np.float32)
         )
         temp_salt_valid = valid_fraction >= 0.999
+        if south_extended:
+            # The copied polar row lets ESMF build ordinary bilinear weights,
+            # but it is still extrapolated analysis data and must not create
+            # density gradients during the later geostrophic reconstruction.
+            temp_salt_valid = temp_salt_valid & (
+                target_t["lat"] >= source_south_lat
+            )
         if "time" in temp_salt_valid.dims:
             temp_salt_valid = temp_salt_valid.all("time")
         temp_salt_valid = temp_salt_valid.astype(np.uint8)
@@ -454,6 +496,9 @@ def write_initial(config):
             "mask_version": TEMP_SALT_VALIDITY_VERSION,
             "vertical_fill_policy": (
                 "surface bfill allowed; bottom ffill excluded"
+            ),
+            "original_source_southern_latitude": np.float32(
+                source_south_lat
             ),
         }
         validity_partial = validity_file + ".partial"
