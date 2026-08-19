@@ -162,6 +162,7 @@ class SolverDiagnostics:
 class PlotDiagnostics:
     """Small fields retained for diagnostic plotting."""
 
+    hgrid_path: Path
     lon: np.ndarray
     lat: np.ndarray
     map_lon: np.ndarray
@@ -1239,8 +1240,23 @@ def make_diagnostic_plots(
     map_x = slice(None, None, map_stride)
     quiver_y = slice(None, None, quiver_stride)
     quiver_x = slice(None, None, quiver_stride)
-    map_lon = data.map_lon[map_y, map_x]
-    map_lat = data.map_lat[map_y, map_x]
+    map_edge_y = np.append(
+        np.arange(0, mask.shape[0], map_stride),
+        mask.shape[0],
+    )
+    map_edge_x = np.append(
+        np.arange(0, mask.shape[1], map_stride),
+        mask.shape[1],
+    )
+    supergrid_edge_y = 2 * map_edge_y
+    supergrid_edge_x = 2 * map_edge_x
+    with Dataset(data.hgrid_path, "r") as hgrid:
+        map_corner_lon = read_array(
+            hgrid.variables["x"][supergrid_edge_y, supergrid_edge_x]
+        )
+        map_corner_lat = read_array(
+            hgrid.variables["y"][supergrid_edge_y, supergrid_edge_x]
+        )
     map_mask = mask[map_y, map_x]
 
     # Calculate plotting quantities only at sampled points.  This avoids
@@ -1321,10 +1337,10 @@ def make_diagnostic_plots(
         strict=True,
     ):
         image = axis.pcolormesh(
-            map_lon,
-            map_lat,
+            map_corner_lon,
+            map_corner_lat,
             field,
-            shading="auto",
+            shading="flat",
             rasterized=True,
             cmap="RdYlBu_r" if vmin >= 0 else "RdBu_r",
             vmin=vmin,
@@ -1429,10 +1445,10 @@ def make_diagnostic_plots(
     correction_speed = np.where(map_mask, correction_speed, np.nan)
     fig, axis = plt.subplots(figsize=(12, 6), constrained_layout=True)
     image = axis.pcolormesh(
-        map_lon,
-        map_lat,
+        map_corner_lon,
+        map_corner_lat,
         correction_speed,
-        shading="auto",
+        shading="flat",
         rasterized=True,
         cmap="RdYlBu_r",
     )
@@ -1463,10 +1479,10 @@ def make_diagnostic_plots(
         (axes[1], "Divergence after", data.divergence_after),
     ):
         image = axis.pcolormesh(
-            map_lon,
-            map_lat,
+            map_corner_lon,
+            map_corner_lat,
             np.where(map_mask, field[map_y, map_x], np.nan),
-            shading="auto",
+            shading="flat",
             rasterized=True,
             cmap="RdBu_r",
             vmin=-0.01,
@@ -2103,6 +2119,7 @@ def reconstruct(
         )
 
         plot_diagnostics = PlotDiagnostics(
+            hgrid_path=hgrid_path,
             lon=lon,
             lat=lat,
             map_lon=longitude_t,
