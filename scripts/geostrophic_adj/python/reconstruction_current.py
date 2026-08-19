@@ -5,11 +5,12 @@ Requirements
 ------------
 * Python 3.10 or newer.
 * NumPy, SciPy, and netCDF4.
+* PyAMG, unless ``--skip-barotropic-correction`` is used.
 * Matplotlib, unless ``--no-plots`` is used.
 
 For example, install the dependencies in an active Conda environment with::
 
-    conda install -c conda-forge numpy scipy netcdf4 matplotlib
+    conda install -c conda-forge numpy scipy netcdf4 matplotlib pyamg
 
 Required input files
 --------------------
@@ -84,8 +85,8 @@ reconstruction, with a symmetric finite-volume barotropic projection:
 2. Compute SSH-referenced geostrophic currents and thermal-wind shear on MOM6
    tracer cells.
 3. Interpolate the currents to MOM6 U/V faces.
-4. Solve a topology-aware, depth-integrated Poisson problem with conjugate
-   gradients.
+4. Solve a topology-aware, depth-integrated Poisson problem with
+   AMG-preconditioned conjugate gradients.
 5. Add the depth-independent velocity correction and overwrite ``u`` and
    ``v`` in a copy of the original IC file.
 
@@ -111,7 +112,7 @@ import numpy as np
 from netCDF4 import Dataset
 from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.csgraph import connected_components
-from scipy.sparse.linalg import LinearOperator, cg
+from scipy.sparse.linalg import cg
 
 
 RHO0 = 1025.0
@@ -975,8 +976,8 @@ def prepare_poisson_system(
     diagonal: np.ndarray,
     rhs_flux: np.ndarray,
     cell_area: np.ndarray,
-) -> tuple[LinearOperator, np.ndarray, np.ndarray, int]:
-    """Enforce compatibility and constrain each component's mean potential."""
+) -> tuple[csr_matrix, np.ndarray, int]:
+    """Enforce component compatibility and fix one gauge per component."""
 
     component_count, labels = connected_components(
         matrix,
@@ -1009,36 +1010,16 @@ def prepare_poisson_system(
             f"relative error={compatibility_error:.6e}"
         )
 
+    _, anchors = np.unique(labels, return_index=True)
+    gauge_values = diagonal[anchors].copy()
+    gauge_values[gauge_values <= 0.0] = 1.0
+    gauge_matrix = csr_matrix(
+        (gauge_values, (anchors, anchors)),
+        shape=matrix.shape,
+    )
+    solver_matrix = (matrix + gauge_matrix).tocsr()
+
     component_sizes = np.bincount(labels)
-    component_diagonal = np.bincount(labels, weights=diagonal)
-    gauge_eigenvalues = component_diagonal / component_sizes
-    gauge_eigenvalues[gauge_eigenvalues <= 0.0] = 1.0
-    solver_diagonal = (
-        diagonal
-        + gauge_eigenvalues[labels] / component_sizes[labels]
-    )
-
-    def apply_component_mean_gauge(values: np.ndarray) -> np.ndarray:
-        component_means = (
-            np.bincount(
-                labels,
-                weights=values,
-                minlength=component_count,
-            )
-            / component_sizes
-        )
-        return (
-            matrix @ values
-            + gauge_eigenvalues[labels] * component_means[labels]
-        )
-
-    solver_operator = LinearOperator(
-        matrix.shape,
-        matvec=apply_component_mean_gauge,
-        rmatvec=apply_component_mean_gauge,
-        dtype=np.float64,
-    )
-
     log(
         "Poisson components: "
         f"count={component_count}, "
@@ -1050,23 +1031,17 @@ def prepare_poisson_system(
         f"max_abs_mean_divergence="
         f"{np.max(np.abs(component_mean_divergence)):.6e} m s-1"
     )
-    log("Poisson gauge: component-mean rank-one constraint")
-    return (
-        solver_operator,
-        compatible_rhs,
-        solver_diagonal,
-        component_count,
-    )
+    log("Poisson gauge: one fixed point per connected component")
+    return solver_matrix, compatible_rhs, component_count
 
 
 def solve_poisson(
-    operator: csr_matrix | LinearOperator,
-    diagonal: np.ndarray,
+    matrix: csr_matrix,
     rhs: np.ndarray,
     rtol: float,
     maxiter: int,
 ) -> tuple[np.ndarray, int, int, float]:
-    """Solve the symmetric gauge-fixed system with Jacobi-preconditioned CG."""
+    """Solve the symmetric gauge-fixed system with AMG-preconditioned CG."""
 
     start = perf_counter()
     iterations = 0
@@ -1077,21 +1052,29 @@ def solve_poisson(
         elapsed("Poisson CG solve", start)
         return np.zeros_like(rhs), 0, 0, 0.0
 
-    if np.any(~np.isfinite(diagonal) | (diagonal <= 0.0)):
-        raise ValueError("Gauge-fixed Poisson diagonal must be positive")
-    preconditioner = LinearOperator(
-        operator.shape,
-        matvec=lambda values: values / diagonal,
-        rmatvec=lambda values: values / diagonal,
-        dtype=np.float64,
+    try:
+        from pyamg import smoothed_aggregation_solver
+    except ImportError as error:
+        raise RuntimeError(
+            "PyAMG is required for barotropic correction; install it with "
+            "'conda install -c conda-forge pyamg'"
+        ) from error
+
+    setup_start = perf_counter()
+    hierarchy = smoothed_aggregation_solver(
+        matrix,
+        symmetry="symmetric",
     )
+    preconditioner = hierarchy.aspreconditioner(cycle="V")
+    log(f"PyAMG hierarchy: levels={len(hierarchy.levels)}, cycle=V")
+    elapsed("build PyAMG hierarchy", setup_start)
 
     def count_iteration(_: np.ndarray) -> None:
         nonlocal iterations
         iterations += 1
 
     solution, info = cg(
-        operator,
+        matrix,
         rhs,
         x0=None,
         rtol=rtol,
@@ -1100,7 +1083,7 @@ def solve_poisson(
         M=preconditioner,
         callback=count_iteration,
     )
-    residual = np.linalg.norm(operator @ solution - rhs)
+    residual = np.linalg.norm(matrix @ solution - rhs)
     relative_residual = residual / rhs_norm
 
     log(
@@ -1846,15 +1829,14 @@ def reconstruct(
             )
             if not np.array_equal(matrix_wet_flat, wet_flat):
                 raise RuntimeError("Poisson wet-point indexing changed unexpectedly")
-            solver_operator, rhs, solver_diagonal, _ = prepare_poisson_system(
+            solver_matrix, rhs, _ = prepare_poisson_system(
                 matrix,
                 diagonal,
                 rhs_raw_flux,
                 area_wet,
             )
             chi_vector, info, iterations, relative_residual = solve_poisson(
-                solver_operator,
-                solver_diagonal,
+                solver_matrix,
                 rhs,
                 rtol=cg_rtol,
                 maxiter=cg_maxiter,
