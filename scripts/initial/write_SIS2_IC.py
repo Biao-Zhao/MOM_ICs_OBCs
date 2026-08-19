@@ -88,6 +88,14 @@ def logical_coordinates(hgrid):
     return np.asarray(xh, dtype=np.float64), np.asarray(yh, dtype=np.float64)
 
 
+def extend_south(data, latitude):
+    """Copy the southernmost source row to one added latitude."""
+    southern_row = data.isel(latitude=0, drop=True).expand_dims(
+        latitude=[latitude]
+    )
+    return xr.concat((southern_row, data), dim="latitude")
+
+
 def make_regridder(source, target, weight_file, reuse_weights):
     """Create or reuse conservative CMEMS-to-SIS2 remapping weights."""
     try:
@@ -166,12 +174,42 @@ def write_sis2_initial(args):
             concentration = concentration.isel(time=0, drop=True)
             thickness = thickness.isel(time=0, drop=True)
 
+        dst_grid = target_tracer_grid(hgrid)
         concentration = concentration.fillna(0.0).clip(0.0, 1.0)
         thickness = thickness.fillna(0.0).clip(min=0.0)
-        ice_volume = concentration * thickness
 
-        src_grid = source_grid(selected_source)
-        dst_grid = target_tracer_grid(hgrid)
+        source_latitudes = np.asarray(
+            selected_source["latitude"].values,
+            dtype=np.float64,
+        )
+        if not np.all(np.diff(source_latitudes) > 0.0):
+            raise ValueError(
+                "Expected source latitude to increase monotonically"
+            )
+        source_south_lat = float(source_latitudes[0])
+        target_south_lat = float(dst_grid["lat_b"].min().values)
+        if not regional and target_south_lat < source_south_lat:
+            if target_south_lat < -90.0 or source_south_lat <= -90.0:
+                raise ValueError(
+                    "Cannot extend the global sea-ice source far enough to "
+                    f"cover the MOM6 grid: source minimum latitude="
+                    f"{source_south_lat}, target minimum latitude="
+                    f"{target_south_lat}"
+                )
+            # Choose the added center so coordinate_bounds() places its
+            # southern edge at exactly 90 S without putting a cell center on
+            # the degenerate pole itself.
+            added_latitude = (-180.0 + source_south_lat) / 3.0
+            print(
+                "Extending global sea-ice source bounds southward from "
+                f"{source_south_lat:.2f} to -90.00 degrees by copying its "
+                "southernmost row"
+            )
+            concentration = extend_south(concentration, added_latitude)
+            thickness = extend_south(thickness, added_latitude)
+
+        ice_volume = concentration * thickness
+        src_grid = source_grid(concentration)
         if regional:
             weight_name = (
                 f"regrid_glorys_{args.resolution}_ice_conservative_"

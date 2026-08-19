@@ -351,15 +351,13 @@ def write_initial(config):
     # Keep the time treatment used by the original script.
     glorys["time"] = (("time",), ds_temp["time"].dt.floor("1d").data)
 
-    weight_variant = "_south_extended" if south_extended else ""
-
     phase_start = perf_counter()
     glorys_to_t = make_regridder(
         glorys,
         target_t,
         os.path.join(
         weight_dir,
-        f"regrid_glorys_{resolution}_tracers{weight_variant}.nc",
+        f"regrid_glorys_{resolution}_tracers.nc",
         ),
         reuse_weights,
         periodic_source,
@@ -369,7 +367,7 @@ def write_initial(config):
         target_u,
         os.path.join(
         weight_dir,
-        f"regrid_glorys_{resolution}_u{weight_variant}.nc",
+        f"regrid_glorys_{resolution}_u.nc",
         ),
         reuse_weights,
         periodic_source,
@@ -379,7 +377,7 @@ def write_initial(config):
         target_v,
         os.path.join(
         weight_dir,
-        f"regrid_glorys_{resolution}_v{weight_variant}.nc",
+        f"regrid_glorys_{resolution}_v.nc",
         ),
         reuse_weights,
         periodic_source,
