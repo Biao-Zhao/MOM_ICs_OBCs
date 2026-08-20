@@ -20,6 +20,8 @@ from pathlib import Path
 import numpy as np
 import xarray as xr
 
+from HCtFlood import kara as flood
+
 
 def coordinate_bounds(values, *, latitude=False):
     """Return cell-edge coordinates for a monotonic 1-D center coordinate."""
@@ -94,6 +96,33 @@ def extend_south(data, latitude):
         latitude=[latitude]
     )
     return xr.concat((southern_row, data), dim="latitude")
+
+
+def flood_missing_2d(data, label):
+    """Fill only missing source points with the HCTFlood Kara algorithm."""
+    values = np.asarray(data.values)
+    missing_before = int(np.count_nonzero(~np.isfinite(values)))
+    if missing_before == 0:
+        print(f"HCTFlood {label}: no missing source points")
+        return data
+
+    flooded = flood.flood_kara_ma(np.ma.masked_invalid(values))
+    if np.ma.isMaskedArray(flooded):
+        flooded = flooded.filled(np.nan)
+    flooded = np.asarray(flooded, dtype=values.dtype)
+    missing_after = int(np.count_nonzero(~np.isfinite(flooded)))
+    if missing_after:
+        raise RuntimeError(
+            f"HCTFlood left {missing_after} missing points in {label}"
+        )
+    print(f"HCTFlood {label}: filled {missing_before} missing source points")
+    return xr.DataArray(
+        flooded,
+        coords=data.coords,
+        dims=data.dims,
+        attrs=data.attrs,
+        name=data.name,
+    )
 
 
 def make_regridder(source, target, weight_file, reuse_weights):
@@ -175,8 +204,26 @@ def write_sis2_initial(args):
             thickness = thickness.isel(time=0, drop=True)
 
         dst_grid = target_tracer_grid(hgrid)
-        concentration = concentration.fillna(0.0).clip(0.0, 1.0)
-        thickness = thickness.fillna(0.0).clip(min=0.0)
+        concentration = concentration.clip(0.0, 1.0)
+        thickness = thickness.clip(min=0.0)
+
+        # Remap concentration and grid-cell-equivalent ice volume.  A valid
+        # zero concentration is real open water and must remain zero.  Where
+        # concentration is positive but thickness is missing, leave volume
+        # missing so HCTFlood fills it from neighboring valid source cells.
+        ice_volume = xr.where(
+            concentration.notnull() & (concentration <= 0.0),
+            0.0,
+            concentration * thickness,
+        )
+        concentration = flood_missing_2d(
+            concentration,
+            "sea-ice concentration",
+        )
+        ice_volume = flood_missing_2d(
+            ice_volume,
+            "sea-ice volume",
+        )
 
         source_latitudes = np.asarray(
             selected_source["latitude"].values,
@@ -206,9 +253,8 @@ def write_sis2_initial(args):
                 "southernmost row"
             )
             concentration = extend_south(concentration, added_latitude)
-            thickness = extend_south(thickness, added_latitude)
+            ice_volume = extend_south(ice_volume, added_latitude)
 
-        ice_volume = concentration * thickness
         src_grid = source_grid(concentration)
         if regional:
             weight_name = (
@@ -266,7 +312,10 @@ def write_sis2_initial(args):
                 "source_product": "CMEMS daily-mean sea ice",
                 "ice_density_kg_m3": args.ice_density,
                 "minimum_ice_concentration": args.minimum_concentration,
-                "history": "Conservative remapping of concentration and ice volume",
+                "history": (
+                    "HCTFlood source filling followed by conservative "
+                    "remapping of concentration and ice volume"
+                ),
             }
         )
 
