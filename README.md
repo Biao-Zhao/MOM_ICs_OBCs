@@ -1,9 +1,9 @@
 # MOM6 Initial and Open-Boundary Conditions
 
-This repository prepares regional [MOM6](https://github.com/NOAA-GFDL/MOM6)
+This repository prepares MOM6/SIS2
 initial conditions (ICs) and open-boundary conditions (OBCs) from the
 Copernicus Marine [**Global Ocean Physics Analysis and Forecast**](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024/description) product. It
-provides a workflow for downloading regional source fields, horizontally and
+provides a workflow for downloading source fields, horizontally and
 vertically remapping them to a MOM6 grid, and optionally reconstructing a
 dynamically balanced three-dimensional current field.
 
