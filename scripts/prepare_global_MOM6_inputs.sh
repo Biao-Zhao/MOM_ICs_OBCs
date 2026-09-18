@@ -49,6 +49,9 @@ NK="75"
 # Number of processes used to run Kara flooding across vertical levels
 KARA_WORKERS=32
 
+# Maximum Kara flooding iterations passed to write_MOM6_IC.py through YAML
+KARA_NMAX=10000
+
 # Apply the depth-integrated Poisson (barotropic) correction after rebuilding
 # the geostrophic currents. Set to "false" to keep the uncorrected currents.
 APPLY_BAROTROPIC_CORRECTION="false"
@@ -187,6 +190,7 @@ output_file: ${IC_File}
 weight_dir: ${REGRID_WEIGHT_DIR}
 reuse_weights: True
 kara_workers: ${KARA_WORKERS}
+kara_nmax: ${KARA_NMAX}
 
 # Variable names inside the NetCDF files
 variable_names:

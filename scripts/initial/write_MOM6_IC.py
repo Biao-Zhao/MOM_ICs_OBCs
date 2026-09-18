@@ -18,6 +18,7 @@ import gc
 import multiprocessing
 import os
 from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 from time import perf_counter
 
 import numpy as np
@@ -166,6 +167,15 @@ def write_initial(config):
     kara_workers = int(config.get("kara_workers", 1))
     if kara_workers < 1:
         raise ValueError("kara_workers must be at least 1.")
+    kara_nmax = int(config.get("kara_nmax", 1000))
+    if kara_nmax < 1:
+        raise ValueError("kara_nmax must be at least 1.")
+    # HCTFlood's masked-array wrapper does not expose nmax. Bind the value
+    # supplied by the prepare-script YAML without modifying HCtFlood/kara.py.
+    flood.flood_kara_raw = partial(
+        flood.flood_kara_raw,
+        nmax=kara_nmax,
+    )
 
     region_keys = ("min_lon", "max_lon", "min_lat", "max_lat")
     region_values = [config.get(key) for key in region_keys]
@@ -347,6 +357,7 @@ def write_initial(config):
     glorys = xarray.merge([ds_temp, ds_sal, ds_ssh, ds_u, ds_v])
     print("GLORYS dimensions used for remapping:", glorys.dims)
     print(f"Kara vertical-level workers: {kara_workers}")
+    print(f"Kara maximum iterations: {kara_nmax}")
 
     # Keep the time treatment used by the original script.
     glorys["time"] = (("time",), ds_temp["time"].dt.floor("1d").data)
